@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: crypto-telegram-agent
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - ../.env
+    volumes:
+      - ../logs:/app/logs
+      - ../data:/app/data
+    depends_on:
+      - db
+    networks:
+      - crypto-network
+
+  db:
+    image: postgres:15-alpine
+    container_name: crypto-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: crypto
+      POSTGRES_PASSWORD: crypto123
+      POSTGRES_DB: crypto_agent
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - crypto-network
+
+volumes:
+  db-data:
+
+networks:
+  crypto-network:
+    driver: bridge
