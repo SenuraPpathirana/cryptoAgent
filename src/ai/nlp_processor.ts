@@ -1,12 +1,13 @@
 
 
 export interface ParsedIntent {
-  action: 'CREATE_GOAL' | 'LIST_GOALS' | 'CHECK_PRICE' | 'DELETE_GOAL' | 'HELP' | 'UNKNOWN';
+  action: 'CREATE_GOAL' | 'LIST_GOALS' | 'CHECK_PRICE' | 'DELETE_GOAL' | 'HELP' | 'ANALYZE_TECHNICAL' | 'UNKNOWN';
   symbol?: string;
   condition?: 'ABOVE' | 'BELOW' | 'CROSSES_ABOVE' | 'CROSSES_BELOW';
   target?: number;
   watchMode?: 'ONCE' | 'CONTINUOUS' | 'RECURRING';
   autoTrade?: boolean;
+  analysisType?: 'FULL' | 'QUICK' | 'RSI' | 'MACD' | 'TREND' | 'SIGNALS' | 'SUPPORT_RESISTANCE' | 'DIVERGENCE';
   confidence: number;
 }
 
@@ -53,6 +54,68 @@ export class NLPProcessor {
   parse(message: string): ParsedIntent {
     const msg = message.toLowerCase().trim();
 
+    // Check for goal creation with technical triggers (resistance, support, etc.)
+    if (this.matchesPattern(msg, ['alert', 'notify', 'tell me', 'goal', 'set', 'create']) || 
+        this.matchesPattern(msg, ['when', 'if', 'reaches'])) {
+      
+      // Check if mentioning technical levels
+      if (this.matchesPattern(msg, ['resistance', 'resist'])) {
+        const symbol = this.extractSymbol(msg);
+        return {
+          action: 'CREATE_GOAL',
+          symbol: symbol || 'BTCUSDT',
+          condition: 'ABOVE',
+          confidence: 0.9
+        };
+      }
+      
+      if (this.matchesPattern(msg, ['support'])) {
+        const symbol = this.extractSymbol(msg);
+        return {
+          action: 'CREATE_GOAL',
+          symbol: symbol || 'BTCUSDT',
+          condition: 'BELOW',
+          confidence: 0.9
+        };
+      }
+      
+      // Check for RSI conditions
+      if (this.matchesPattern(msg, ['oversold', 'overbought', 'rsi'])) {
+        const symbol = this.extractSymbol(msg);
+        return {
+          action: 'CREATE_GOAL',
+          symbol: symbol || 'BTCUSDT',
+          confidence: 0.85,
+          // Will be handled specially in chat routes
+        };
+      }
+      
+      // Check for trend flip
+      if (this.matchesPattern(msg, ['trend', 'flip', 'reversal', 'reverse'])) {
+        const symbol = this.extractSymbol(msg);
+        return {
+          action: 'CREATE_GOAL',
+          symbol: symbol || 'BTCUSDT',
+          confidence: 0.85
+        };
+      }
+      
+      // Check for divergence
+      if (this.matchesPattern(msg, ['divergence'])) {
+        const symbol = this.extractSymbol(msg);
+        return {
+          action: 'CREATE_GOAL',
+          symbol: symbol || 'BTCUSDT',
+          confidence: 0.85
+        };
+      }
+    }
+
+    // Check for technical analysis
+    if (this.matchesPattern(msg, ['analyze', 'analysis', 'technical', 'indicators', 'rsi', 'macd', 'trend', 'divergence', 'support', 'resistance', 'overbought', 'oversold'])) {
+      return this.parseAnalysisRequest(msg);
+    }
+
     // Check for list goals
     if (this.matchesPattern(msg, ['show', 'list', 'my goals', 'active', 'display'])) {
       return {
@@ -96,6 +159,45 @@ export class NLPProcessor {
     return {
       action: 'UNKNOWN',
       confidence: 0
+    };
+  }
+
+  private parseAnalysisRequest(message: string): ParsedIntent {
+    const symbol = this.extractSymbol(message) || 'BTCUSDT';
+    
+    // Determine analysis type - be more specific!
+    let analysisType: 'FULL' | 'QUICK' | 'RSI' | 'MACD' | 'TREND' | 'SIGNALS' | 'SUPPORT_RESISTANCE' | 'DIVERGENCE' = 'FULL';
+    let confidence = 0.8;
+
+    // Check for specific questions first
+    if (this.matchesPattern(message, ['divergence', 'bullish divergence', 'bearish divergence'])) {
+      analysisType = 'DIVERGENCE';
+      confidence = 0.98;
+    } else if (this.matchesPattern(message, ['support', 'resistance', 'support line', 'resistance line'])) {
+      analysisType = 'SUPPORT_RESISTANCE';
+      confidence = 0.98;
+    } else if (this.matchesPattern(message, ['rsi', 'oversold', 'overbought'])) {
+      analysisType = 'RSI';
+      confidence = 0.95;
+    } else if (this.matchesPattern(message, ['macd', 'momentum', 'crossover'])) {
+      analysisType = 'MACD';
+      confidence = 0.95;
+    } else if (this.matchesPattern(message, ['trend', 'uptrend', 'downtrend', 'direction'])) {
+      analysisType = 'TREND';
+      confidence = 0.95;
+    } else if (this.matchesPattern(message, ['signal', 'buy', 'sell', 'trade'])) {
+      analysisType = 'SIGNALS';
+      confidence = 0.9;
+    } else if (this.matchesPattern(message, ['quick', 'fast', 'brief'])) {
+      analysisType = 'QUICK';
+      confidence = 0.85;
+    }
+
+    return {
+      action: 'ANALYZE_TECHNICAL',
+      symbol,
+      analysisType,
+      confidence
     };
   }
 
@@ -202,6 +304,12 @@ export class NLPProcessor {
 
   generateResponse(intent: ParsedIntent, result?: any): string {
     switch (intent.action) {
+      case 'ANALYZE_TECHNICAL':
+        if (result) {
+          return result; // Analysis engine returns formatted text
+        }
+        return `Unable to analyze ${intent.symbol} at this time. Please try again later.`;
+
       case 'CREATE_GOAL':
         return `✅ Got it! I'll watch ${intent.symbol} and alert you when it ${this.conditionToText(intent.condition!)} $${intent.target?.toLocaleString()}.`;
 
@@ -227,6 +335,7 @@ export class NLPProcessor {
           `🎯 Create price alerts: "Alert me when BTC hits $50000"\n` +
           `📋 View goals: "Show my active goals"\n` +
           `💰 Check prices: "What's the current BTC price?"\n` +
+          `📊 Technical analysis: "Analyze BTC", "Check RSI for ETH", "Show BTC trend"\n` +
           `🗑️ Delete goals: "Delete my BTC goal"\n` +
           `📈 Auto-trading: "Buy ETH when it crosses $3000"\n\n` +
           `Try being conversational - I understand natural language!`;
@@ -234,6 +343,7 @@ export class NLPProcessor {
       default:
         return `I'm not sure I understood that. Could you rephrase? For example:\n` +
           `• "Alert me when Bitcoin goes above $50000"\n` +
+          `• "Analyze Bitcoin trend"\n` +
           `• "Show my active goals"\n` +
           `• "What's the current ETH price?"\n\n` +
           `Type "help" to see what I can do!`;

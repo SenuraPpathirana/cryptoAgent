@@ -5,12 +5,13 @@ const logger = createModuleLogger('LLM');
 
 export interface LLMResponse {
   intent: {
-    action: 'CREATE_GOAL' | 'LIST_GOALS' | 'CHECK_PRICE' | 'DELETE_GOAL' | 'HELP' | 'UNKNOWN';
+    action: 'CREATE_GOAL' | 'LIST_GOALS' | 'CHECK_PRICE' | 'DELETE_GOAL' | 'HELP' | 'ANALYZE_TECHNICAL' | 'UNKNOWN';
     symbol?: string;
-    condition?: 'ABOVE' | 'BELOW' | 'CROSSES_ABOVE' | 'CROSSES_BELOW';
+    condition?: 'ABOVE' | 'BELOW' | 'CROSSES_ABOVE' | 'CROSSES_BELOW' | 'BULLISH_DIVERGENCE' | 'BEARISH_DIVERGENCE' | 'ANY_DIVERGENCE';
     target?: number;
     watchMode?: 'ONCE' | 'CONTINUOUS' | 'RECURRING';
     autoTrade?: boolean;
+    analysisType?: 'FULL' | 'QUICK' | 'RSI' | 'MACD' | 'TREND' | 'SIGNALS' | 'SUPPORT_RESISTANCE' | 'DIVERGENCE';
   };
   response: string;
   confidence: number;
@@ -41,7 +42,7 @@ export class LLMService {
     }
   }
 
-  async processMessage(message: string, context?: { tradingMode: string }): Promise<LLMResponse | null> {
+  async processMessage(message: string, context?: { tradingMode: string; conversationHistory?: Array<{ role: 'user' | 'assistant', message: string }> }): Promise<LLMResponse | null> {
     if (this.provider === 'none') {
       return null; // Fall back to basic NLP
     }
@@ -78,30 +79,66 @@ Available actions:
 - CREATE_GOAL: User wants to set a price alert or trading goal
 - LIST_GOALS: User wants to see their active goals
 - CHECK_PRICE: User wants to know current price
+- ANALYZE_TECHNICAL: User wants technical analysis (RSI, MACD, trends, support/resistance, divergence, overbought/oversold)
 - DELETE_GOAL: User wants to remove a goal
-- HELP: User needs help
+- HELP: User needs help or asks how something works
 - UNKNOWN: Cannot determine intent
+
+IMPORTANT: When users ask "how do you determine support/resistance" or similar methodology questions, respond with HELP action and provide this explanation:
+
+Support/Resistance Methodology:
+- Support/resistance levels are where CANDLE BODIES close, not wicks
+- Resistance: Where candle bodies closed near highs (rejections with upper wicks)
+- Support: Where candle bodies closed near lows (bounces with lower wicks)
+- Short timeframes (1h, 15m): Need multiple body closes at same level (2+)
+- Long timeframes (1d, 1w): Single body close is significant
+- Trend break: When candle closes by breaking through previous candles' wicks
+- Strength based on number of body closes at that level
 
 Price conditions:
 - ABOVE: Alert when price goes above target
 - BELOW: Alert when price goes below target
 - CROSSES_ABOVE: Alert when price crosses above (transition)
 - CROSSES_BELOW: Alert when price crosses below (transition)
+- BULLISH_DIVERGENCE: Alert when bullish divergence is detected
+- BEARISH_DIVERGENCE: Alert when bearish divergence is detected
+- ANY_DIVERGENCE: Alert when any divergence (bullish or bearish) is detected
 
 Watch modes:
 - ONCE: Trigger once and stop (default)
 - CONTINUOUS: Keep watching after trigger
 - RECURRING: Reset after cooldown
 
+Analysis types (for ANALYZE_TECHNICAL action):
+- DIVERGENCE: Check for bullish/bearish divergence
+- SUPPORT_RESISTANCE: Show support and resistance levels
+- RSI: Only RSI indicator (oversold/overbought)
+- MACD: Only MACD momentum indicator
+- TREND: Trend direction analysis
+- SIGNALS: Trading signals (buy/sell recommendations)
+- QUICK: Fast RSI + MACD analysis
+- FULL: Complete analysis with all indicators
+
+Technical Analysis Keywords (MATCH SPECIFIC FIRST):
+- divergence, bullish divergence, bearish divergence → analysisType: DIVERGENCE
+- support, resistance, support lines, resistance levels → analysisType: SUPPORT_RESISTANCE
+- RSI, overbought, oversold → analysisType: RSI
+- MACD, momentum, crossover → analysisType: MACD
+- trend, uptrend, downtrend → analysisType: TREND
+- signal, buy, sell, trade → analysisType: SIGNALS
+- quick, fast, brief → analysisType: QUICK
+- analyze, analysis, comprehensive → analysisType: FULL
+
 Respond ONLY with valid JSON in this exact format:
 {
   "intent": {
-    "action": "CREATE_GOAL" | "LIST_GOALS" | "CHECK_PRICE" | "DELETE_GOAL" | "HELP" | "UNKNOWN",
+    "action": "CREATE_GOAL" | "LIST_GOALS" | "CHECK_PRICE" | "ANALYZE_TECHNICAL" | "DELETE_GOAL" | "HELP" | "UNKNOWN",
     "symbol": "BTCUSDT" (if applicable),
     "condition": "ABOVE" | "BELOW" | "CROSSES_ABOVE" | "CROSSES_BELOW" (if applicable),
     "target": 50000 (number, if applicable),
     "watchMode": "ONCE" | "CONTINUOUS" | "RECURRING" (if applicable),
-    "autoTrade": false (boolean, if user mentions trading/buying/selling)
+    "autoTrade": false (boolean, if user mentions trading/buying/selling),
+    "analysisType": "FULL" | "QUICK" | "RSI" | "MACD" | "TREND" | "SIGNALS" (if action is ANALYZE_TECHNICAL)
   },
   "response": "Friendly confirmation message for the user",
   "confidence": 0.95 (0-1 scale)
@@ -114,88 +151,241 @@ Output: {"intent":{"action":"CREATE_GOAL","symbol":"BTCUSDT","condition":"ABOVE"
 Input: "What's the current ETH price?"
 Output: {"intent":{"action":"CHECK_PRICE","symbol":"ETHUSDT"},"response":"Let me check the current Ethereum price for you.","confidence":0.98}
 
+Input: "Analyze Bitcoin trend"
+Output: {"intent":{"action":"ANALYZE_TECHNICAL","symbol":"BTCUSDT","analysisType":"FULL"},"response":"Analyzing Bitcoin market trends and indicators...","confidence":0.95}
+
+Input: "Is ETH overbought?"
+Output: {"intent":{"action":"ANALYZE_TECHNICAL","symbol":"ETHUSDT","analysisType":"RSI"},"response":"Checking RSI indicator for Ethereum...","confidence":0.97}
+
 Input: "Show my goals"
-Output: {"intent":{"action":"LIST_GOALS"},"response":"Here are your active trading goals.","confidence":0.99}`;
+Output: {"intent":{"action":"LIST_GOALS"},"response":"Here are your active trading goals.","confidence":0.99}
+
+Input: "Monitor for bearish divergence on BTC"
+Output: {"intent":{"action":"CREATE_GOAL","symbol":"BTCUSDT","condition":"BEARISH_DIVERGENCE","watchMode":"CONTINUOUS"},"response":"I'll monitor Bitcoin for bearish divergence and alert you when detected.","confidence":0.95}
+
+Input: "Alert me if there's any divergence near resistance for ETH"
+Output: {"intent":{"action":"CREATE_GOAL","symbol":"ETHUSDT","condition":"ANY_DIVERGENCE","watchMode":"CONTINUOUS"},"response":"I'll watch Ethereum for any divergence patterns near resistance levels.","confidence":0.93}
+
+Input: "How do you determine support and resistance?"
+Output: {"intent":{"action":"HELP"},"response":"I determine support and resistance based on where candle BODIES close, not wicks:\n\n📍 Resistance: Where bodies closed near highs (rejections with upper wicks)\n📍 Support: Where bodies closed near lows (bounces with lower wicks)\n\nFor short timeframes (1h, 15m): I look for multiple body closes at the same level (2+)\nFor long timeframes (1d, 1w): Even a single body close is significant\n\nA trend breaks when a candle closes by breaking through previous candles' wicks. The strength of each level is based on how many times bodies closed there.","confidence":0.98}`;
   }
 
-  private buildUserPrompt(message: string, context?: { tradingMode: string }): string {
-    let prompt = `User message: "${message}"`;
+  private buildUserPrompt(message: string, context?: { tradingMode: string; conversationHistory?: Array<{ role: 'user' | 'assistant', message: string }> }): string {
+    let prompt = '';
+    
+    // Add conversation history for context
+    if (context?.conversationHistory && context.conversationHistory.length > 0) {
+      prompt += 'Recent conversation:\n';
+      for (const msg of context.conversationHistory) {
+        if (msg.role === 'user') {
+          prompt += `User: ${msg.message}\n`;
+        } else {
+          // Extract resistance/support from new format: "• $95,737 (nearest)"
+          const resistanceMatches = msg.message.match(/Key Resistance[^\n]*:\n((?:• \$[\d,]+.*\n?)+)/i);
+          const supportMatches = msg.message.match(/Support[^\n]*:\n((?:• \$[\d,]+.*\n?)+)/i);
+          
+          let hasLevels = false;
+          if (resistanceMatches) {
+            const nearestResistance = resistanceMatches[1].match(/• \$([\d,]+).*\(nearest\)/);
+            if (nearestResistance) {
+              prompt += `Assistant showed: Resistance at $${nearestResistance[1]}`;
+              hasLevels = true;
+            }
+          }
+          if (supportMatches) {
+            const nearestSupport = supportMatches[1].match(/• \$([\d,]+).*\(nearest\)/);
+            if (nearestSupport) {
+              if (hasLevels) prompt += `, `;
+              else prompt += `Assistant showed: `;
+              prompt += `Support at $${nearestSupport[1]}`;
+              hasLevels = true;
+            }
+          }
+          if (hasLevels) prompt += '\n';
+        }
+      }
+      prompt += '\n';
+    }
+    
+    prompt += `Current user message: "${message}"`;
     if (context?.tradingMode) {
       prompt += `\nTrading mode: ${context.tradingMode}`;
     }
+    
+    // Add hint if user is referencing resistance/support from history
+    if (message.toLowerCase().includes('resistance') || message.toLowerCase().includes('support')) {
+      if (context?.conversationHistory?.some(m => m.role === 'assistant' && (m.message.includes('Resistance') || m.message.includes('Support')))) {
+        prompt += `\nNote: User previously asked about support/resistance levels. They may be referencing those levels.`;
+      }
+    }
+    
     return prompt;
   }
 
-  private async callGemini(systemPrompt: string, userPrompt: string): Promise<string> {
+  private async callGemini(systemPrompt: string, userPrompt: string, retries = 3): Promise<string> {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
     
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [
-            { text: systemPrompt },
-            { text: userPrompt }
-          ]
-        }],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 500,
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                { text: systemPrompt },
+                { text: userPrompt }
+              ]
+            }],
+            generationConfig: {
+              temperature: 0.1,
+              maxOutputTokens: 500,
+            }
+          }),
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          
+          // Don't retry on authentication errors
+          if (response.status === 401 || response.status === 403) {
+            throw new Error(`Gemini API authentication error: ${response.status} - Check your API key`);
+          }
+          
+          // Handle quota exceeded errors
+          if (response.status === 429) {
+            const errorMsg = errorData.error?.message || 'Rate limit exceeded';
+            throw new Error(`Gemini API rate limit: ${errorMsg}`);
+          }
+          
+          throw new Error(`Gemini API error: ${response.status} ${response.statusText} - ${JSON.stringify(errorData)}`);
+
         }
-      })
-    });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(`Gemini API error: ${response.status} ${response.statusText} - ${JSON.stringify(errorData)}`);
+        const data = await response.json();
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        
+        if (!text) {
+          throw new Error(`No response from Gemini. Response: ${JSON.stringify(data)}`);
+        }
+
+        logger.debug('Gemini response', { text, attempt });
+        return text;
+      } catch (error) {
+        const isLastAttempt = attempt === retries;
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        
+        // Don't retry on auth errors
+        if (errorMsg.includes('authentication')) {
+          throw error;
+        }
+        
+        if (isLastAttempt) {
+          logger.error('Gemini API call failed after retries', { 
+            attempts: retries, 
+            error: errorMsg,
+            hint: 'Check internet connection and firewall settings'
+          });
+          throw error;
+        }
+        
+        logger.warn(`Gemini API call failed (attempt ${attempt}/${retries}), retrying...`, { error: errorMsg });
+        
+        // Wait before retry (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 500));
+      }
     }
-
-    const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
     
-    if (!text) {
-      throw new Error(`No response from Gemini. Response: ${JSON.stringify(data)}`);
-    }
-
-    logger.debug('Gemini response', { text });
-    return text;
+    throw new Error('Failed to call Gemini API after all retries');
   }
 
-  private async callGroq(systemPrompt: string, userPrompt: string): Promise<string> {
+  private async callGroq(systemPrompt: string, userPrompt: string, retries = 3): Promise<string> {
     const url = 'https://api.groq.com/openai/v1/chat/completions';
     
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`
-      },
-      body: JSON.stringify({
-        model: this.model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        temperature: 0.1,
-        max_tokens: 500,
-      })
-    });
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.apiKey}`
+          },
+          body: JSON.stringify({
+            model: this.model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt }
+            ],
+            temperature: 0.1,
+            max_tokens: 500,
+          }),
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeout);
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(`Groq API error: ${response.status} ${response.statusText} - ${JSON.stringify(errorData)}`);
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          
+          // Don't retry on authentication errors
+          if (response.status === 401 || response.status === 403) {
+            throw new Error(`Groq API authentication error: ${response.status} - Check your API key`);
+          }
+          
+          // Handle quota exceeded errors
+          if (response.status === 429) {
+            const errorMsg = errorData.error?.message || 'Rate limit exceeded';
+            throw new Error(`Groq API rate limit: ${errorMsg}`);
+          }
+          
+          throw new Error(`Groq API error: ${response.status} ${response.statusText} - ${JSON.stringify(errorData)}`);
+
+        }
+
+        const data = await response.json();
+        const text = data.choices?.[0]?.message?.content;
+        
+        if (!text) {
+          throw new Error(`No response from Groq. Response: ${JSON.stringify(data)}`);
+        }
+
+        logger.debug('Groq response', { text, attempt });
+        return text;
+      } catch (error) {
+        const isLastAttempt = attempt === retries;
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        
+        // Don't retry on auth errors
+        if (errorMsg.includes('authentication')) {
+          throw error;
+        }
+        
+        if (isLastAttempt) {
+          logger.error('Groq API call failed after retries', { 
+            attempts: retries, 
+            error: errorMsg,
+            hint: 'Check internet connection and firewall settings'
+          });
+          throw error;
+        }
+        
+        logger.warn(`Groq API call failed (attempt ${attempt}/${retries}), retrying...`, { error: errorMsg });
+        
+        // Wait before retry (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 500));
+      }
     }
-
-    const data = await response.json();
-    const text = data.choices?.[0]?.message?.content;
     
-    if (!text) {
-      throw new Error(`No response from Groq. Response: ${JSON.stringify(data)}`);
-    }
-
-    logger.debug('Groq response', { text });
-    return text;
+    throw new Error('Failed to call Groq API after all retries');
   }
 
   private parseLLMResponse(text: string): LLMResponse {
