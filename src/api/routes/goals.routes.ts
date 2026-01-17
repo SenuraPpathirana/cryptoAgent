@@ -1,8 +1,12 @@
 import { Router } from 'express';
 import { GoalsController } from '../controllers/goals.controller';
+import { jwtAuthMiddleware } from '../middleware/auth.middleware';
 
 export const goalsRouter = Router();
 const controller = new GoalsController();
+
+// Apply authentication middleware to all routes
+goalsRouter.use(jwtAuthMiddleware);
 
 // Create a new goal
 goalsRouter.post('/', controller.createGoal);

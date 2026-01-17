@@ -6,10 +6,13 @@ import { GoalsRepository } from '../../storage/repositories/goals.repo';
 import { PriceCache } from '../../market/price_cache';
 import { BinanceDataFetcher } from '../../market/binance_data_fetcher';
 import { AnalysisEngine } from '../../analysis/analysis_engine';
+import { UsersRepository } from '../../storage/repositories/users.repo';
+import { jwtAuthMiddleware } from '../middleware/auth.middleware';
 
 const logger = createModuleLogger('ChatRoutes');
 const nlp = new NLPProcessor();
 const llm = new LLMService();
+const usersRepo = UsersRepository.getInstance();
 
 // Store last analysis results per session (simple in-memory store)
 const lastAnalysis: Map<string, { symbol: string; resistance?: number; support?: number; timestamp: number }> = new Map();
@@ -37,9 +40,13 @@ const openPositions: Map<string, Position[]> = new Map();
 
 export const chatRouter = Router();
 
+// Apply JWT authentication to all chat routes
+chatRouter.use(jwtAuthMiddleware);
+
 chatRouter.post('/', async (req: Request, res: Response) => {
   try {
-    const { message, tradingMode, sessionId: clientSessionId } = req.body;
+    const { message, tradingMode, sessionId: clientSessionId, agentEnabled } = req.body;
+    const userId = req.userId; // Get user ID from JWT middleware (attached by jwtAuthMiddleware)
 
     if (!message) {
       return res.status(400).json({ 
@@ -48,8 +55,31 @@ chatRouter.post('/', async (req: Request, res: Response) => {
       });
     }
 
+    if (!userId) {
+      logger.error('User ID not found in request', { headers: req.headers });
+      return res.status(401).json({ 
+        ok: false, 
+        error: 'Authentication required' 
+      });
+    }
+
+    // Get user configuration
+    const userConfig = await usersRepo.getUserConfig(userId);
+    if (!userConfig) {
+      logger.warn('User config not found', { userId });
+      return res.status(400).json({ 
+        ok: false, 
+        error: 'User configuration not found. Please complete your profile setup.' 
+      });
+    }
+
     // Use client-provided sessionId or fall back to IP
     const sessionId = clientSessionId || req.ip || 'default';
+    
+    // Set trading agent mode from frontend if provided
+    if (typeof agentEnabled === 'boolean') {
+      tradingAgentMode.set(sessionId, agentEnabled);
+    }
     
     // Try LLM first, fall back to basic NLP
     let intent;
@@ -127,11 +157,12 @@ chatRouter.post('/', async (req: Request, res: Response) => {
         let positionsMsg = `━━━━━━━━━━━━━━━━━━\n📊 OPEN POSITIONS (${userPositions.length})\n━━━━━━━━━━━━━━━━━━\n\n`;
         
         for (const pos of userPositions) {
-          const currentPrice = priceCache.getPrice(pos.symbol) || pos.entryPrice;
+          const currentPrice = Number(priceCache.getPrice(pos.symbol) || pos.entryPrice);
+          const entryPrice = Number(pos.entryPrice);
           const pnlPercent = pos.side === 'LONG' 
-            ? ((currentPrice - pos.entryPrice) / pos.entryPrice * 100)
-            : ((pos.entryPrice - currentPrice) / pos.entryPrice * 100);
-          const pnlAmount = pnlPercent * pos.leverage;
+            ? ((currentPrice - entryPrice) / entryPrice * 100)
+            : ((entryPrice - currentPrice) / entryPrice * 100);
+          const pnlAmount = pnlPercent * Number(pos.leverage);
           const emoji = pnlAmount >= 0 ? '🟢' : '🔴';
           
           positionsMsg += `${emoji} ${pos.symbol} - ${pos.side}\n`;
@@ -200,7 +231,17 @@ chatRouter.post('/', async (req: Request, res: Response) => {
       case 'OPEN_POSITION':
         // Check if trading agent is enabled
         if (!tradingAgentMode.get(sessionId)) {
-          const errorMsg = `❌ Trading Agent Disabled\n\nPlease enable trading agent first by saying "enable trading agent" or "turn on trading agent".`;
+          const errorMsg = `❌ Trading Agent Disabled\n\nPlease enable trading agent first by clicking the "Start Agent" button.`;
+          history.push({ role: 'assistant', message: errorMsg, timestamp: Date.now() });
+          return res.json({
+            ok: true,
+            response: errorMsg
+          });
+        }
+
+        // Check if user has configured Binance API keys
+        if (!userConfig.binance_api_key || !userConfig.binance_api_secret) {
+          const errorMsg = `❌ Binance API Not Configured\n\nYou need to configure your Binance API credentials before opening positions.\n\n1. Click your profile in the sidebar\n2. Select "Binance Settings"\n3. Enter your API Key and Secret\n\nGet testnet keys from: https://testnet.binancefuture.com/`;
           history.push({ role: 'assistant', message: errorMsg, timestamp: Date.now() });
           return res.json({
             ok: true,
@@ -346,14 +387,17 @@ chatRouter.post('/', async (req: Request, res: Response) => {
           ? currentPrice * (1 + takeProfitPercent / 100)
           : currentPrice * (1 - takeProfitPercent / 100);
 
-        // Execute trade
+        // Execute trade with user-specific credentials
         const tradeResult = await tradeExecutor.executeTrade({
           symbol: posSymbol,
           side,
           quantity: positionSize / currentPrice,
           leverage,
           stopLoss,
-          takeProfit
+          takeProfit,
+          apiKey: userConfig.binance_api_key!,
+          apiSecret: userConfig.binance_api_secret!,
+          testnet: userConfig.binance_testnet ?? true
         });
 
         if (tradeResult.success) {
@@ -380,12 +424,19 @@ chatRouter.post('/', async (req: Request, res: Response) => {
           openPositions.set(sessionId, userPositions);
           logger.info('Position stored', { sessionId, positionCount: userPositions.length });
           
-          // Send Telegram notification to configured channel
+          // Send Telegram notification to user's configured channel
           try {
-            const { env } = await import('../../config/env');
-            // Send without Markdown parsing to avoid special character issues
-            await telegramBot.sendMessage(env.TELEGRAM_CHANNEL_ID, positionMsg, { parse_mode: undefined });
-            logger.info('Position notification sent to Telegram', { channelId: env.TELEGRAM_CHANNEL_ID });
+            if (userConfig.telegram_bot_token && userConfig.telegram_channel_id) {
+              // Create a user-specific Telegram bot instance
+              const TelegramBot = (await import('node-telegram-bot-api')).default;
+              const userTelegramBot = new TelegramBot(userConfig.telegram_bot_token);
+              
+              // Send without Markdown parsing to avoid special character issues
+              await userTelegramBot.sendMessage(userConfig.telegram_channel_id, positionMsg, { parse_mode: undefined });
+              logger.info('Position notification sent to Telegram', { channelId: userConfig.telegram_channel_id });
+            } else {
+              logger.info('Telegram notification skipped - not configured', { userId });
+            }
           } catch (telegramError) {
             logger.error('Failed to send Telegram notification', { error: telegramError });
           }
@@ -468,6 +519,7 @@ chatRouter.post('/', async (req: Request, res: Response) => {
 
         goal = await goalsRepo.create({
           id: `goal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          userId: userId,
           symbol: intent.symbol,
           targetPrice: intent.target || 0, // 0 for divergence goals
           condition: intent.condition,
@@ -492,7 +544,7 @@ chatRouter.post('/', async (req: Request, res: Response) => {
         });
 
       case 'LIST_GOALS':
-        result = await goalsRepo.findAll();
+        result = await goalsRepo.findByUserId(userId);
         const activeGoals = result.filter((g: any) => g.state === 'WATCHING' || g.state === 'TRIGGERED');
         return res.json({
           ok: true,

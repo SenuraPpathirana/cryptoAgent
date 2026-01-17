@@ -1,0 +1,42 @@
+how to check for divergence...
+
+for bearish
+
+check 2 latest tops.
+
+if latest top is higher than the top before, and RSI shows opposite -> bearish
+
+if latest top is lower than the top before, and RSI shows opposite -> bearish
+
+for bullish
+
+if latest bottom is higher than the top before, and RSI shows opposite -> bullish
+
+if latest bottom is lower than the top before, and RSI shows opposite -> bullish
+
+
+
+
+API Key
+0lrdE41wgTzIDNAEYeW0H6Uhuaa1Fuxx1QRQ8r2o2a2hpXrk5REqdPOR09P1ia9x
+Secret Key
+4JOlnDp5uDWY2jM4MFrHjbCTtKq6DptlZ1S0sUSccwEn56LAHect6IpjIxZOfIjo
+API restrictions
+
+
+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
+
+
+
+
+API Key
+yMYLZ87TR6c0BSjvpkWZRSv4VpmEIcbMcJRf6lGlGbkbUt4jiJJMegUECilULo30
+Secret Key
+eSaiFeYsdvLI7qDKv88JbZOLUvonD7qURm83L2ISCPEx7tEouF5O6lnyDtpzV1Jl
+API restrictions
+Enable Reading
+Enable Spot & Margin Trading
+Enable Futures
+
+
+sk_iMJuQlI5shR7pS8DNV7546UN3OqsXONm

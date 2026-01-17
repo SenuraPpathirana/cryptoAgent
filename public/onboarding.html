@@ -1,0 +1,562 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome - Crypto Trading Agent</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            width: 100%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .step-indicator {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+
+        .step {
+            width: 40px;
+            height: 4px;
+            background: #e0e0e0;
+            border-radius: 2px;
+            transition: background 0.3s;
+        }
+
+        .step.active {
+            background: #667eea;
+        }
+
+        .step.completed {
+            background: #10b981;
+        }
+
+        .form-section {
+            display: none;
+        }
+
+        .form-section.active {
+            display: block;
+            animation: fadeIn 0.3s;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+            font-size: 14px;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .form-group small {
+            display: block;
+            margin-top: 5px;
+            color: #666;
+            font-size: 12px;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            margin-top: 10px;
+        }
+
+        .btn-skip {
+            background: transparent;
+            color: #667eea;
+            border: 2px solid #667eea;
+            margin-top: 10px;
+        }
+
+        .toggle-mode {
+            text-align: center;
+            margin-top: 20px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        .toggle-mode a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .success {
+            background: #efe;
+            color: #3c3;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 14px;
+            display: none;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+            cursor: pointer;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+
+        .status-badge.configured {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-badge.not-configured {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Crypto Trading Agent</h1>
+        <p class="subtitle">Your AI-powered trading assistant</p>
+
+        <div class="step-indicator">
+            <div class="step active" id="step1"></div>
+            <div class="step" id="step2"></div>
+            <div class="step" id="step3"></div>
+        </div>
+
+        <div class="error" id="error"></div>
+        <div class="success" id="success"></div>
+
+        <!-- Step 1: Login/Register -->
+        <div class="form-section active" id="auth-section">
+            <form id="auth-form">
+                <div class="form-group" id="username-group" style="display: none;">
+                    <label for="username">Username (optional)</label>
+                    <input type="text" id="username" placeholder="Enter your username">
+                </div>
+
+                <div class="form-group">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" required placeholder="your@email.com">
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" required placeholder="Minimum 6 characters">
+                </div>
+
+                <button type="submit" class="btn" id="auth-btn">Login</button>
+            </form>
+
+            <div class="toggle-mode">
+                <span id="toggle-text">Don't have an account?</span>
+                <a href="#" id="toggle-link">Register</a>
+            </div>
+        </div>
+
+        <!-- Step 2: Telegram Configuration -->
+        <div class="form-section" id="telegram-section">
+            <h2 style="text-align: center; color: #333; margin-bottom: 20px;">📱 Telegram Setup</h2>
+            <p style="text-align: center; color: #666; margin-bottom: 20px; font-size: 14px;">
+                Configure your Telegram bot to receive trading alerts
+            </p>
+
+            <form id="telegram-form">
+                <div class="form-group">
+                    <label for="telegram-token">Bot Token</label>
+                    <input type="text" id="telegram-token" placeholder="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz">
+                    <small>Get from <a href="https://t.me/botfather" target="_blank">@BotFather</a> on Telegram</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="telegram-channel">Channel ID</label>
+                    <input type="text" id="telegram-channel" placeholder="-1001234567890">
+                    <small>Your channel ID (start with -100)</small>
+                </div>
+
+                <button type="submit" class="btn">Save & Continue</button>
+                <button type="button" class="btn btn-skip" id="skip-telegram">Skip for Now</button>
+            </form>
+        </div>
+
+        <!-- Step 3: Binance Configuration -->
+        <div class="form-section" id="binance-section">
+            <h2 style="text-align: center; color: #333; margin-bottom: 20px;">💰 Binance Setup</h2>
+            <p style="text-align: center; color: #666; margin-bottom: 20px; font-size: 14px;">
+                Connect your Binance account for trading
+            </p>
+
+            <form id="binance-form">
+                <div class="form-group">
+                    <label for="binance-key">API Key</label>
+                    <input type="text" id="binance-key" placeholder="Your Binance API Key">
+                </div>
+
+                <div class="form-group">
+                    <label for="binance-secret">API Secret</label>
+                    <input type="password" id="binance-secret" placeholder="Your Binance API Secret">
+                    <small>Get from <a href="https://www.binance.com/en/my/settings/api-management" target="_blank">Binance API Management</a></small>
+                </div>
+
+                <div class="form-group checkbox-group">
+                    <input type="checkbox" id="binance-testnet" checked>
+                    <label for="binance-testnet" style="margin: 0;">Use Testnet (recommended for beginners)</label>
+                </div>
+
+                <button type="submit" class="btn">Complete Setup</button>
+                <button type="button" class="btn btn-skip" id="skip-binance">Skip for Now</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let currentStep = 1;
+        let isRegisterMode = false;
+        let authToken = null;
+
+        // Elements
+        const authSection = document.getElementById('auth-section');
+        const telegramSection = document.getElementById('telegram-section');
+        const binanceSection = document.getElementById('binance-section');
+        const authForm = document.getElementById('auth-form');
+        const telegramForm = document.getElementById('telegram-form');
+        const binanceForm = document.getElementById('binance-form');
+        const toggleLink = document.getElementById('toggle-link');
+        const toggleText = document.getElementById('toggle-text');
+        const usernameGroup = document.getElementById('username-group');
+        const authBtn = document.getElementById('auth-btn');
+        const errorDiv = document.getElementById('error');
+        const successDiv = document.getElementById('success');
+
+        // Check if already logged in
+        const token = localStorage.getItem('authToken');
+        if (token) {
+            // Verify token
+            fetch('/api/auth/verify', {
+                headers: { 'Authorization': `Bearer ${token}` }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.valid) {
+                    // Already logged in, redirect to chat
+                    window.location.href = '/';
+                } else {
+                    localStorage.removeItem('authToken');
+                }
+            })
+            .catch(() => localStorage.removeItem('authToken'));
+        }
+
+        // Toggle between login and register
+        toggleLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            isRegisterMode = !isRegisterMode;
+            
+            if (isRegisterMode) {
+                authBtn.textContent = 'Register';
+                toggleText.textContent = 'Already have an account?';
+                toggleLink.textContent = 'Login';
+                usernameGroup.style.display = 'block';
+            } else {
+                authBtn.textContent = 'Login';
+                toggleText.textContent = "Don't have an account?";
+                toggleLink.textContent = 'Register';
+                usernameGroup.style.display = 'none';
+            }
+        });
+
+        // Auth form submission
+        authForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const username = document.getElementById('username').value || undefined;
+            
+            const endpoint = isRegisterMode ? '/api/auth/register' : '/api/auth/login';
+            const body = isRegisterMode ? { email, password, username } : { email, password };
+            
+            try {
+                authBtn.disabled = true;
+                authBtn.textContent = isRegisterMode ? 'Creating account...' : 'Logging in...';
+                
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    authToken = data.token;
+                    console.log('Login successful, token received:', !!authToken);
+                    localStorage.setItem('authToken', authToken);
+                    console.log('Token saved to localStorage:', localStorage.getItem('authToken') ? 'YES' : 'NO');
+                    
+                    showSuccess(isRegisterMode ? 'Account created successfully!' : 'Login successful!');
+                    
+                    // Move to next step
+                    setTimeout(() => {
+                        goToStep(2);
+                    }, 1000);
+                } else {
+                    showError(data.error || 'Authentication failed');
+                    authBtn.disabled = false;
+                    authBtn.textContent = isRegisterMode ? 'Register' : 'Login';
+                }
+            } catch (error) {
+                showError('Network error. Please try again.');
+                authBtn.disabled = false;
+                authBtn.textContent = isRegisterMode ? 'Register' : 'Login';
+            }
+        });
+
+        // Telegram form submission
+        telegramForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const botToken = document.getElementById('telegram-token').value;
+            const channelId = document.getElementById('telegram-channel').value;
+            
+            if (!botToken || !channelId) {
+                showError('Please fill in all Telegram fields');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/user/config/telegram', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        telegram_bot_token: botToken,
+                        telegram_channel_id: channelId
+                    })
+                });
+                
+                if (response.ok) {
+                    showSuccess('Telegram configured successfully!');
+                    setTimeout(() => goToStep(3), 1000);
+                } else {
+                    showError('Failed to save Telegram config');
+                }
+            } catch (error) {
+                showError('Network error. Please try again.');
+            }
+        });
+
+        // Binance form submission
+        binanceForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const apiKey = document.getElementById('binance-key').value;
+            const apiSecret = document.getElementById('binance-secret').value;
+            const testnet = document.getElementById('binance-testnet').checked;
+            
+            if (!apiKey || !apiSecret) {
+                showError('Please fill in all Binance fields');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/user/config/binance', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                        binance_api_key: apiKey,
+                        binance_api_secret: apiSecret,
+                        binance_testnet: testnet
+                    })
+                });
+                
+                if (response.ok) {
+                    showSuccess('Setup complete! Redirecting to chat...');
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 1500);
+                } else {
+                    showError('Failed to save Binance config');
+                }
+            } catch (error) {
+                showError('Network error. Please try again.');
+            }
+        });
+
+        // Skip buttons
+        document.getElementById('skip-telegram').addEventListener('click', () => {
+            goToStep(3);
+        });
+
+        document.getElementById('skip-binance').addEventListener('click', () => {
+            console.log('Skipping binance, redirecting to chat. Token exists:', !!localStorage.getItem('authToken'));
+            window.location.href = '/';
+        });
+
+        // Step navigation
+        function goToStep(step) {
+            currentStep = step;
+            
+            // Hide all sections
+            authSection.classList.remove('active');
+            telegramSection.classList.remove('active');
+            binanceSection.classList.remove('active');
+            
+            // Update step indicators
+            document.getElementById('step1').classList.remove('active');
+            document.getElementById('step2').classList.remove('active');
+            document.getElementById('step3').classList.remove('active');
+            
+            for (let i = 1; i < step; i++) {
+                document.getElementById(`step${i}`).classList.add('completed');
+            }
+            
+            // Show current section
+            if (step === 1) {
+                authSection.classList.add('active');
+                document.getElementById('step1').classList.add('active');
+            } else if (step === 2) {
+                telegramSection.classList.add('active');
+                document.getElementById('step2').classList.add('active');
+            } else if (step === 3) {
+                binanceSection.classList.add('active');
+                document.getElementById('step3').classList.add('active');
+            }
+            
+            hideError();
+            hideSuccess();
+        }
+
+        // Error/Success helpers
+        function showError(message) {
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            successDiv.style.display = 'none';
+        }
+
+        function showSuccess(message) {
+            successDiv.textContent = message;
+            successDiv.style.display = 'block';
+            errorDiv.style.display = 'none';
+        }
+
+        function hideError() {
+            errorDiv.style.display = 'none';
+        }
+
+        function hideSuccess() {
+            successDiv.style.display = 'none';
+        }
+    </script>
+</body>
+</html>

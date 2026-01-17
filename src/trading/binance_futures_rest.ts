@@ -12,16 +12,23 @@ export class BinanceFuturesREST {
   private apiSecret: string;
   private baseURL: string;
 
-  private constructor() {
-    this.apiKey = env.BINANCE_API_KEY || '';
-    this.apiSecret = env.BINANCE_API_SECRET || '';
-    this.baseURL = env.BINANCE_REST_BASE || 'https://testnet.binancefuture.com';
+  constructor(apiKey?: string, apiSecret?: string, testnet?: boolean) {
+    this.apiKey = apiKey || env.BINANCE_API_KEY || '';
+    this.apiSecret = apiSecret || env.BINANCE_API_SECRET || '';
+    this.baseURL = testnet !== false 
+      ? 'https://testnet.binancefuture.com' 
+      : (env.BINANCE_REST_BASE || 'https://testnet.binancefuture.com');
 
     this.client = axios.create({
       baseURL: this.baseURL,
       headers: {
         'X-MBX-APIKEY': this.apiKey,
       },
+    });
+
+    logger.info('Binance REST client created', { 
+      baseURL: this.baseURL, 
+      hasApiKey: !!this.apiKey 
     });
   }
 
@@ -237,8 +244,11 @@ export class BinanceFuturesREST {
       recvWindow: 10000, // 10 seconds to handle network delays
     };
 
-    // Add positionSide for futures (BOTH for one-way mode)
-    orderParams.positionSide = params.positionSide || 'BOTH';
+    // Only add positionSide if explicitly provided (don't default to BOTH)
+    // This avoids conflicts with account position mode settings
+    if (params.positionSide) {
+      orderParams.positionSide = params.positionSide;
+    }
 
     // Add optional params with validated values
     if (validatedPrice !== undefined) orderParams.price = validatedPrice;
@@ -255,18 +265,35 @@ export class BinanceFuturesREST {
       logger.info('Order placed', { orderId: response.data.orderId, quantity: validatedQuantity });
       return response.data;
     } catch (error: any) {
+      const binanceError = error?.response?.data;
       const errorDetails = {
         status: error?.response?.status,
         statusText: error?.response?.statusText,
-        data: error?.response?.data,
+        binanceError: binanceError,
+        binanceMsg: binanceError?.msg || binanceError?.message,
+        binanceCode: binanceError?.code,
         message: error?.message,
+        params: orderParams,
         config: {
           url: error?.config?.url,
           method: error?.config?.method,
-          headers: error?.config?.headers
+          baseURL: error?.config?.baseURL
         }
       };
       logger.error('Failed to place order', errorDetails);
+      
+      // Throw a more descriptive error
+      const errorMsg = binanceError?.msg || binanceError?.message || error?.message || 'Unknown error';
+      throw new Error(`Binance order failed: ${errorMsg}`);
+      
+      // Log Binance error details if available
+      if (error?.response?.data) {
+        logger.error('Binance API error response', { 
+          code: error.response.data.code,
+          msg: error.response.data.msg 
+        });
+      }
+      
       throw error;
     }
   }

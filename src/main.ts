@@ -1,7 +1,7 @@
 import { createModuleLogger } from './config/logger';
 import { env } from './config/env';
 import { APIServer } from './api/server';
-import { Database } from './storage/db';
+import { db } from './storage/db';
 import { BinanceWebSocket } from './market/binance_ws';
 import { GoalEvaluator } from './agent/goal_evaluator';
 import { TelegramBotClient } from './telegram/telegram_bot';
@@ -13,7 +13,6 @@ const logger = createModuleLogger('Main');
 
 class CryptoTelegramAgent {
   private apiServer: APIServer;
-  private database: Database;
   private binanceWS: BinanceWebSocket;
   private goalEvaluator: GoalEvaluator;
   private telegramBot: TelegramBotClient;
@@ -21,7 +20,6 @@ class CryptoTelegramAgent {
 
   constructor() {
     this.apiServer = new APIServer();
-    this.database = Database.getInstance();
     this.binanceWS = BinanceWebSocket.getInstance();
     this.goalEvaluator = GoalEvaluator.getInstance();
     this.telegramBot = TelegramBotClient.getInstance();
@@ -35,7 +33,7 @@ class CryptoTelegramAgent {
       logger.info(`Trading Mode: ${env.TRADING_MODE}`);
 
       // 1. Connect to database
-      await this.database.connect();
+      await db.connect();
 
       // 2. Start API server
       await this.apiServer.start();

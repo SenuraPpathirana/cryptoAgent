@@ -52,6 +52,10 @@ export class GoalsRepository {
   public async findByFilter(filter: GoalFilter): Promise<Goal[]> {
     let goals = Array.from(this.goals.values());
 
+    if (filter.userId) {
+      goals = goals.filter(g => g.userId === filter.userId);
+    }
+
     if (filter.symbol) {
       goals = goals.filter(g => g.symbol === filter.symbol?.toUpperCase());
     }
@@ -61,5 +65,9 @@ export class GoalsRepository {
     }
 
     return goals;
+  }
+
+  public async findByUserId(userId: number): Promise<Goal[]> {
+    return Array.from(this.goals.values()).filter(g => g.userId === userId);
   }
 }

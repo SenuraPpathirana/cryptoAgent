@@ -29,13 +29,34 @@ export interface LLMResponse {
 }
 
 export class LLMService {
-  private provider: 'gemini' | 'groq' | 'none';
+  private provider: 'gemini' | 'groq' | 'github' | 'pollinations' | 'none';
+  private fallbackProvider: 'groq' | null = null;
+  private rateLimitUntil: number = 0;
   private apiKey: string;
   private model: string;
+  private groqApiKey: string;
+  private groqModel: string = 'llama-3.1-8b-instant';
 
   constructor() {
-    // Determine which provider to use based on available API keys
-    if (env.GEMINI_API_KEY) {
+    // Store Groq API key for fallback
+    this.groqApiKey = env.GROQ_API_KEY || '';
+    
+    // Determine which provider to use based on available API keys (prioritize Pollinations)
+    if (env.POLLINATIONS_API_KEY) {
+      this.provider = 'pollinations';
+      this.apiKey = env.POLLINATIONS_API_KEY;
+      this.model = 'openai';
+      logger.info(`LLM Service initialized with Pollinations (Google Gemini 2.5 Flash Lite)`);
+    } else if (env.GITHUB_TOKEN) {
+      this.provider = 'github';
+      this.apiKey = env.GITHUB_TOKEN;
+      this.model = 'gpt-4o';
+      if (this.groqApiKey) {
+        logger.info(`LLM Service initialized with GitHub Models (model: ${this.model}) with Groq fallback`);
+      } else {
+        logger.info(`LLM Service initialized with GitHub Models (model: ${this.model})`);
+      }
+    } else if (env.GEMINI_API_KEY) {
       this.provider = 'gemini';
       this.apiKey = env.GEMINI_API_KEY;
       this.model = 'gemini-2.0-flash-exp';
@@ -63,8 +84,37 @@ export class LLMService {
       const userPrompt = this.buildUserPrompt(message, context);
 
       let response;
-      if (this.provider === 'gemini') {
+      
+      // Check if we should use fallback provider (GitHub rate limited)
+      const now = Date.now();
+      if (this.provider === 'github' && this.fallbackProvider === 'groq' && now < this.rateLimitUntil) {
+        logger.info(`Using Groq fallback (GitHub rate limited until ${new Date(this.rateLimitUntil).toLocaleString()})`);
+        response = await this.callGroq(systemPrompt, userPrompt);
+      } else if (this.provider === 'pollinations') {
+        response = await this.callPollinations(systemPrompt, userPrompt);
+      } else if (this.provider === 'gemini') {
         response = await this.callGemini(systemPrompt, userPrompt);
+      } else if (this.provider === 'github') {
+        try {
+          response = await this.callGitHub(systemPrompt, userPrompt);
+          // Clear fallback if GitHub works
+          if (this.fallbackProvider) {
+            logger.info('GitHub Models API recovered, switching back from Groq fallback');
+            this.fallbackProvider = null;
+            this.rateLimitUntil = 0;
+          }
+        } catch (error) {
+          // If rate limited and Groq is available, switch to fallback
+          if (error instanceof Error && error.message.includes('rate limit') && this.groqApiKey) {
+            logger.warn('GitHub Models rate limited, switching to Groq fallback');
+            this.fallbackProvider = 'groq';
+            // Set rate limit duration (20 hours for daily limit)
+            this.rateLimitUntil = now + (20 * 60 * 60 * 1000);
+            response = await this.callGroq(systemPrompt, userPrompt);
+          } else {
+            throw error;
+          }
+        }
       } else {
         response = await this.callGroq(systemPrompt, userPrompt);
       }
@@ -74,7 +124,7 @@ export class LLMService {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('LLM processing error', { 
         error: errorMessage, 
-        provider: this.provider,
+        provider: this.fallbackProvider || this.provider,
         stack: error instanceof Error ? error.stack : undefined
       });
       return null; // Fall back to basic NLP
@@ -345,6 +395,70 @@ Output: {"intent":{"action":"OPEN_POSITION","symbol":"ETHUSDT","side":"SHORT"},"
     throw new Error('Failed to call Gemini API after all retries');
   }
 
+  private async callPollinations(systemPrompt: string, userPrompt: string, retries = 3): Promise<string> {
+    const url = 'https://text.pollinations.ai/openai';
+    
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+        
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.apiKey}`
+          },
+          body: JSON.stringify({
+            model: this.model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt }
+            ],
+            temperature: 0.7,
+            max_tokens: 1000,
+          }),
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          
+          // Handle rate limit errors
+          if (response.status === 429) {
+            const errorMsg = errorData.error?.message || 'Rate limit exceeded';
+            throw new Error(`Pollinations API rate limit: ${errorMsg}`);
+          }
+          
+          throw new Error(`Pollinations API error: ${response.status} ${response.statusText} - ${JSON.stringify(errorData)}`);
+        }
+
+        const data = await response.json();
+        const text = data.choices?.[0]?.message?.content;
+        
+        if (!text) {
+          throw new Error(`No response from Pollinations. Response: ${JSON.stringify(data)}`);
+        }
+
+        return text;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        
+        if (attempt < retries) {
+          logger.warn(`Pollinations API call failed (attempt ${attempt}/${retries}), retrying...`, { error: errorMessage });
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+        } else {
+          logger.error('Pollinations API call failed after retries', { attempts: retries, error: errorMessage });
+          throw error;
+        }
+      }
+    }
+    
+    throw new Error('Failed to call Pollinations API after all retries');
+  }
+
   private async callGroq(systemPrompt: string, userPrompt: string, retries = 3): Promise<string> {
     const url = 'https://api.groq.com/openai/v1/chat/completions';
     
@@ -428,6 +542,82 @@ Output: {"intent":{"action":"OPEN_POSITION","symbol":"ETHUSDT","side":"SHORT"},"
     throw new Error('Failed to call Groq API after all retries');
   }
 
+  private async callGitHub(systemPrompt: string, userPrompt: string, retries = 3): Promise<string> {
+    const url = 'https://models.inference.ai.azure.com/chat/completions';
+    
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+        
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.apiKey}`
+          },
+          body: JSON.stringify({
+            model: this.model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt }
+            ],
+            temperature: 0.7,
+            max_tokens: 1000,
+            top_p: 1
+          }),
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          
+          // Don't retry on authentication errors
+          if (response.status === 401 || response.status === 403) {
+            throw new Error(`GitHub Models API authentication error: ${response.status} - Check your GITHUB_TOKEN`);
+          }
+          
+          // Handle rate limit errors
+          if (response.status === 429) {
+            const errorMsg = errorData.error?.message || 'Rate limit exceeded';
+            throw new Error(`GitHub Models API rate limit: ${errorMsg}`);
+          }
+          
+          throw new Error(`GitHub Models API error: ${response.status} ${response.statusText} - ${JSON.stringify(errorData)}`);
+        }
+
+        const data = await response.json();
+        const text = data.choices?.[0]?.message?.content;
+        
+        if (!text) {
+          throw new Error(`No response from GitHub Models. Response: ${JSON.stringify(data)}`);
+        }
+
+        return text;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        
+        // Don't retry on authentication errors
+        if (errorMessage.includes('authentication error')) {
+          throw error;
+        }
+        
+        if (attempt < retries) {
+          logger.warn(`GitHub Models API call failed (attempt ${attempt}/${retries}), retrying...`, { error: errorMessage });
+          // Wait before retry (exponential backoff)
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+        } else {
+          logger.error('GitHub Models API call failed after retries', { attempts: retries, error: errorMessage });
+          throw error;
+        }
+      }
+    }
+    
+    throw new Error('Failed to call GitHub Models API after all retries');
+  }
+
   private parseLLMResponse(text: string): LLMResponse {
     try {
       // Try to extract JSON from markdown code blocks if present
@@ -441,6 +631,17 @@ Output: {"intent":{"action":"OPEN_POSITION","symbol":"ETHUSDT","side":"SHORT"},"
         if (objectMatch) {
           jsonText = objectMatch[0];
         }
+      }
+
+      // Fix common Groq JSON formatting issues ONLY
+      // Groq sometimes returns: `"response": "text","confidence":0.98` (missing space after comma before field)
+      // Only apply these fixes if we detect malformed patterns
+      const hasGroqMalformation = /\",\"(confidence|intent|response)\":/.test(jsonText) || 
+                                   /\}\s*,\s*\"(confidence|response)\":/.test(jsonText);
+      
+      if (hasGroqMalformation) {
+        // Fix missing comma before top-level fields when preceded by closing brace/bracket
+        jsonText = jsonText.replace(/(\}|\])\s*\"(confidence|response)\":/g, '$1,\n  "$2":');
       }
 
       const parsed = JSON.parse(jsonText);
@@ -462,6 +663,9 @@ Output: {"intent":{"action":"OPEN_POSITION","symbol":"ETHUSDT","side":"SHORT"},"
   }
 
   getProvider(): string {
+    if (this.fallbackProvider && Date.now() < this.rateLimitUntil) {
+      return `${this.provider} (fallback: ${this.fallbackProvider})`;
+    }
     return this.provider;
   }
 }

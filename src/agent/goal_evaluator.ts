@@ -136,24 +136,37 @@ export class GoalEvaluator {
 
       await this.goalManager.markGoalTriggered(goal.id, currentPrice);
 
-      // Send Telegram notification
-      if (goal.notifyChannel) {
+      // Send Telegram notification with user-specific credentials
+      if (goal.notifyChannel && goal.userId) {
         try {
-          const symbol = goal.symbol.replace('USDT', '');
-          const conditionText = goal.condition === 'ABOVE' ? 'above' :
-                                goal.condition === 'BELOW' ? 'below' :
-                                goal.condition === 'CROSSES_ABOVE' ? 'crossed above' :
-                                goal.condition === 'CROSSES_BELOW' ? 'crossed below' : goal.condition;
+          // Get user's Telegram configuration
+          const { UsersRepository } = await import('../storage/repositories/users.repo');
+          const usersRepo = UsersRepository.getInstance();
+          const userConfig = await usersRepo.getUserConfig(goal.userId);
           
-          const message = `🎯 *ALERT TRIGGERED*\n\n` +
-            `${symbol} has ${conditionText} $${goal.targetPrice.toLocaleString()}\n\n` +
-            `Current Price: $${currentPrice.toLocaleString()}\n` +
-            `Goal ID: \`${goal.id}\`\n` +
-            `Mode: ${goal.watchMode}\n` +
-            `Triggers: ${goal.triggerCount + 1}`;
-          
-          await this.channelPublisher.publishCustomMessage(message);
-          logger.info(`Telegram notification sent for goal ${goal.id}`);
+          if (userConfig?.telegram_bot_token && userConfig?.telegram_channel_id) {
+            const symbol = goal.symbol.replace('USDT', '');
+            const conditionText = goal.condition === 'ABOVE' ? 'above' :
+                                  goal.condition === 'BELOW' ? 'below' :
+                                  goal.condition === 'CROSSES_ABOVE' ? 'crossed above' :
+                                  goal.condition === 'CROSSES_BELOW' ? 'crossed below' : goal.condition;
+            
+            const message = `🎯 *ALERT TRIGGERED*\n\n` +
+              `${symbol} has ${conditionText} $${goal.targetPrice.toLocaleString()}\n\n` +
+              `Current Price: $${currentPrice.toLocaleString()}\n` +
+              `Goal ID: \`${goal.id}\`\n` +
+              `Mode: ${goal.watchMode}\n` +
+              `Triggers: ${goal.triggerCount + 1}`;
+            
+            // Create user-specific Telegram bot
+            const TelegramBot = (await import('node-telegram-bot-api')).default;
+            const userTelegramBot = new TelegramBot(userConfig.telegram_bot_token);
+            await userTelegramBot.sendMessage(userConfig.telegram_channel_id, message, { parse_mode: 'Markdown' });
+            
+            logger.info(`Telegram notification sent for goal ${goal.id} to user ${goal.userId}`);
+          } else {
+            logger.info(`Skipping Telegram notification for goal ${goal.id} - user ${goal.userId} has no Telegram config`);
+          }
         } catch (error) {
           logger.error(`Failed to send Telegram notification for goal ${goal.id}`, { error });
         }
