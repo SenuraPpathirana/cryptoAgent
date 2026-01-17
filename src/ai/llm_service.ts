@@ -5,13 +5,24 @@ const logger = createModuleLogger('LLM');
 
 export interface LLMResponse {
   intent: {
-    action: 'CREATE_GOAL' | 'LIST_GOALS' | 'CHECK_PRICE' | 'DELETE_GOAL' | 'HELP' | 'ANALYZE_TECHNICAL' | 'UNKNOWN';
+    action: 'CREATE_GOAL' | 'LIST_GOALS' | 'CHECK_PRICE' | 'DELETE_GOAL' | 'HELP' | 'ANALYZE_TECHNICAL' | 'OPEN_POSITION' | 'TOGGLE_TRADING_AGENT' | 'VIEW_POSITIONS' | 'CLOSE_ALL_POSITIONS' | 'UNKNOWN';
     symbol?: string;
     condition?: 'ABOVE' | 'BELOW' | 'CROSSES_ABOVE' | 'CROSSES_BELOW' | 'BULLISH_DIVERGENCE' | 'BEARISH_DIVERGENCE' | 'ANY_DIVERGENCE';
     target?: number;
     watchMode?: 'ONCE' | 'CONTINUOUS' | 'RECURRING';
     autoTrade?: boolean;
     analysisType?: 'FULL' | 'QUICK' | 'RSI' | 'MACD' | 'TREND' | 'SIGNALS' | 'SUPPORT_RESISTANCE' | 'DIVERGENCE';
+    timeframe?: string;
+    // Trading-specific fields
+    side?: 'LONG' | 'SHORT';
+    leverage?: number;
+    positionSize?: number;
+    stopLoss?: number;
+    takeProfit?: number;
+    requireDivergence?: boolean;
+    requireRSI?: boolean;
+    requireLevel?: boolean;
+    requireTrend?: boolean;
   };
   response: string;
   confidence: number;
@@ -32,7 +43,7 @@ export class LLMService {
     } else if (env.GROQ_API_KEY) {
       this.provider = 'groq';
       this.apiKey = env.GROQ_API_KEY;
-      this.model = 'llama-3.3-70b-versatile';
+      this.model = 'llama-3.1-8b-instant'; // Faster, uses fewer tokens
       logger.info(`LLM Service initialized with Groq (model: ${this.model})`);
     } else {
       this.provider = 'none';
@@ -81,6 +92,10 @@ Available actions:
 - CHECK_PRICE: User wants to know current price
 - ANALYZE_TECHNICAL: User wants technical analysis (RSI, MACD, trends, support/resistance, divergence, overbought/oversold)
 - DELETE_GOAL: User wants to remove a goal
+- TOGGLE_TRADING_AGENT: User wants to enable/disable trading agent mode
+- OPEN_POSITION: User wants to open a trading position (requires trading agent enabled)
+- VIEW_POSITIONS: User wants to see their open positions
+- CLOSE_ALL_POSITIONS: User wants to close all open positions (e.g., "close all positions", "exit all trades")
 - HELP: User needs help or asks how something works
 - UNKNOWN: Cannot determine intent
 
@@ -132,13 +147,23 @@ Technical Analysis Keywords (MATCH SPECIFIC FIRST):
 Respond ONLY with valid JSON in this exact format:
 {
   "intent": {
-    "action": "CREATE_GOAL" | "LIST_GOALS" | "CHECK_PRICE" | "ANALYZE_TECHNICAL" | "DELETE_GOAL" | "HELP" | "UNKNOWN",
+    "action": "CREATE_GOAL" | "LIST_GOALS" | "CHECK_PRICE" | "ANALYZE_TECHNICAL" | "DELETE_GOAL" | "TOGGLE_TRADING_AGENT" | "OPEN_POSITION" | "VIEW_POSITIONS" | "CLOSE_ALL_POSITIONS" | "HELP" | "UNKNOWN",
     "symbol": "BTCUSDT" (if applicable),
     "condition": "ABOVE" | "BELOW" | "CROSSES_ABOVE" | "CROSSES_BELOW" (if applicable),
     "target": 50000 (number, if applicable),
     "watchMode": "ONCE" | "CONTINUOUS" | "RECURRING" (if applicable),
     "autoTrade": false (boolean, if user mentions trading/buying/selling),
-    "analysisType": "FULL" | "QUICK" | "RSI" | "MACD" | "TREND" | "SIGNALS" (if action is ANALYZE_TECHNICAL)
+    "analysisType": "FULL" | "QUICK" | "RSI" | "MACD" | "TREND" | "SIGNALS" (if action is ANALYZE_TECHNICAL),
+    "side": "LONG" | "SHORT" (for OPEN_POSITION),
+    "leverage": 10 (optional number, default 10, for OPEN_POSITION),
+    "positionSize": 100 (optional USDT amount, default 100, for OPEN_POSITION),
+    "stopLoss": 2 (optional percent, default 2, for OPEN_POSITION),
+    "takeProfit": 5 (optional percent, default 5, for OPEN_POSITION),
+    "requireDivergence": true (boolean, if user mentions divergence condition for OPEN_POSITION),
+    "requireRSI": true (boolean, if user mentions overbought/oversold for OPEN_POSITION),
+    "requireLevel": true (boolean, if user mentions resistance/support for OPEN_POSITION),
+    "requireTrend": true (boolean, if user mentions trend direction for OPEN_POSITION),
+    "timeframe": "1h" | "15m" | "4h" | "1d" (optional, default 1h)
   },
   "response": "Friendly confirmation message for the user",
   "confidence": 0.95 (0-1 scale)
@@ -167,7 +192,22 @@ Input: "Alert me if there's any divergence near resistance for ETH"
 Output: {"intent":{"action":"CREATE_GOAL","symbol":"ETHUSDT","condition":"ANY_DIVERGENCE","watchMode":"CONTINUOUS"},"response":"I'll watch Ethereum for any divergence patterns near resistance levels.","confidence":0.93}
 
 Input: "How do you determine support and resistance?"
-Output: {"intent":{"action":"HELP"},"response":"I determine support and resistance based on where candle BODIES close, not wicks:\n\n📍 Resistance: Where bodies closed near highs (rejections with upper wicks)\n📍 Support: Where bodies closed near lows (bounces with lower wicks)\n\nFor short timeframes (1h, 15m): I look for multiple body closes at the same level (2+)\nFor long timeframes (1d, 1w): Even a single body close is significant\n\nA trend breaks when a candle closes by breaking through previous candles' wicks. The strength of each level is based on how many times bodies closed there.","confidence":0.98}`;
+Output: {"intent":{"action":"HELP"},"response":"I determine support and resistance based on where candle BODIES close, not wicks:\n\n📍 Resistance: Where bodies closed near highs (rejections with upper wicks)\n📍 Support: Where bodies closed near lows (bounces with lower wicks)\n\nFor short timeframes (1h, 15m): I look for multiple body closes at the same level (2+)\nFor long timeframes (1d, 1w): Even a single body close is significant\n\nA trend breaks when a candle closes by breaking through previous candles' wicks. The strength of each level is based on how many times bodies closed there.","confidence":0.98}
+
+Input: "Enable trading agent"
+Output: {"intent":{"action":"TOGGLE_TRADING_AGENT"},"response":"Enabling trading agent mode...","confidence":0.99}
+
+Input: "Turn off trading agent"
+Output: {"intent":{"action":"TOGGLE_TRADING_AGENT"},"response":"Disabling trading agent mode...","confidence":0.99}
+
+Input: "If near resistance with bearish divergence and overbought RSI, open short position"
+Output: {"intent":{"action":"OPEN_POSITION","symbol":"BTCUSDT","side":"SHORT","requireLevel":true,"requireDivergence":true,"requireRSI":true},"response":"Checking conditions for short position...","confidence":0.95}
+
+Input: "Open long with 20x leverage if price near support"
+Output: {"intent":{"action":"OPEN_POSITION","symbol":"BTCUSDT","side":"LONG","leverage":20,"requireLevel":true},"response":"Checking conditions for long position with 20x leverage...","confidence":0.93}
+
+Input: "Open short position on ETH"
+Output: {"intent":{"action":"OPEN_POSITION","symbol":"ETHUSDT","side":"SHORT"},"response":"Opening short position on Ethereum...","confidence":0.97}`;
   }
 
   private buildUserPrompt(message: string, context?: { tradingMode: string; conversationHistory?: Array<{ role: 'user' | 'assistant', message: string }> }): string {

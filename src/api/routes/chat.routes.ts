@@ -17,11 +17,29 @@ const lastAnalysis: Map<string, { symbol: string; resistance?: number; support?:
 // Store conversation history per session
 const conversationHistory: Map<string, Array<{ role: 'user' | 'assistant', message: string, timestamp: number }>> = new Map();
 
+// Store trading agent mode per session (enabled/disabled)
+const tradingAgentMode: Map<string, boolean> = new Map();
+
+// Store open positions (in-memory for now)
+interface Position {
+  id: string;
+  symbol: string;
+  side: 'LONG' | 'SHORT';
+  entryPrice: number;
+  quantity: number;
+  leverage: number;
+  stopLoss: number;
+  takeProfit: number;
+  openedAt: number;
+  conditions: string[];
+}
+const openPositions: Map<string, Position[]> = new Map();
+
 export const chatRouter = Router();
 
 chatRouter.post('/', async (req: Request, res: Response) => {
   try {
-    const { message, tradingMode } = req.body;
+    const { message, tradingMode, sessionId: clientSessionId } = req.body;
 
     if (!message) {
       return res.status(400).json({ 
@@ -30,8 +48,8 @@ chatRouter.post('/', async (req: Request, res: Response) => {
       });
     }
 
-    // Generate session ID from client (could be improved with real session management)
-    const sessionId = req.ip || 'default';
+    // Use client-provided sessionId or fall back to IP
+    const sessionId = clientSessionId || req.ip || 'default';
     
     // Try LLM first, fall back to basic NLP
     let intent;
@@ -94,6 +112,298 @@ chatRouter.post('/', async (req: Request, res: Response) => {
 
     // Handle different actions
     switch (intent.action) {
+      case 'VIEW_POSITIONS':
+        const userPositions = openPositions.get(sessionId) || [];
+        
+        if (userPositions.length === 0) {
+          const noPositionsMsg = `📊 Open Positions\n\nYou have no open positions.`;
+          history.push({ role: 'assistant', message: noPositionsMsg, timestamp: Date.now() });
+          return res.json({
+            ok: true,
+            response: noPositionsMsg
+          });
+        }
+        
+        let positionsMsg = `━━━━━━━━━━━━━━━━━━\n📊 OPEN POSITIONS (${userPositions.length})\n━━━━━━━━━━━━━━━━━━\n\n`;
+        
+        for (const pos of userPositions) {
+          const currentPrice = priceCache.getPrice(pos.symbol) || pos.entryPrice;
+          const pnlPercent = pos.side === 'LONG' 
+            ? ((currentPrice - pos.entryPrice) / pos.entryPrice * 100)
+            : ((pos.entryPrice - currentPrice) / pos.entryPrice * 100);
+          const pnlAmount = pnlPercent * pos.leverage;
+          const emoji = pnlAmount >= 0 ? '🟢' : '🔴';
+          
+          positionsMsg += `${emoji} ${pos.symbol} - ${pos.side}\n`;
+          positionsMsg += `Entry: $${pos.entryPrice.toLocaleString()}\n`;
+          positionsMsg += `Current: $${currentPrice.toLocaleString()}\n`;
+          positionsMsg += `Leverage: ${pos.leverage}x\n`;
+          positionsMsg += `PNL: ${pnlAmount >= 0 ? '+' : ''}${pnlAmount.toFixed(2)}%\n`;
+          positionsMsg += `Stop Loss: $${pos.stopLoss.toFixed(2)}\n`;
+          positionsMsg += `Take Profit: $${pos.takeProfit.toFixed(2)}\n`;
+          positionsMsg += `ID: ${pos.id}\n\n`;
+        }
+        
+        positionsMsg += `⚠️ PAPER TRADING MODE\n━━━━━━━━━━━━━━━━━━`;
+        
+        history.push({ role: 'assistant', message: positionsMsg, timestamp: Date.now() });
+        return res.json({
+          ok: true,
+          response: positionsMsg,
+          positions: userPositions
+        });
+      
+      case 'CLOSE_ALL_POSITIONS':
+        const closingPositions = openPositions.get(sessionId) || [];
+        
+        if (closingPositions.length === 0) {
+          const noPositionsMsg = `📭 No open positions to close.`;
+          history.push({ role: 'assistant', message: noPositionsMsg, timestamp: Date.now() });
+          return res.json({
+            ok: true,
+            response: noPositionsMsg
+          });
+        }
+
+        // Close all positions
+        openPositions.set(sessionId, []);
+        
+        const closedMsg = `✅ All Positions Closed\n\n${closingPositions.length} position(s) have been closed:\n\n${closingPositions.map(p => 
+          `• ${p.symbol} ${p.side} - Entry: $${p.entryPrice.toLocaleString()}`
+        ).join('\\n')}\n\n⚠️ Note: In testnet mode, positions are closed in memory only.`;
+        
+        history.push({ role: 'assistant', message: closedMsg, timestamp: Date.now() });
+        
+        return res.json({
+          ok: true,
+          response: closedMsg,
+          closedCount: closingPositions.length
+        });
+      
+      case 'TOGGLE_TRADING_AGENT':
+        const isEnabled = !tradingAgentMode.get(sessionId);
+        tradingAgentMode.set(sessionId, isEnabled);
+        
+        const statusMsg = isEnabled 
+          ? `✅ Trading Agent Enabled\n\nI can now open positions based on your analysis and conditions.\n\nExample: "If near resistance with bearish divergence and overbought RSI, open short position"`
+          : `⏸️ Trading Agent Disabled\n\nI will not open any positions until you enable trading agent again.`;
+        
+        // Store in history
+        history.push({ role: 'assistant', message: statusMsg, timestamp: Date.now() });
+        
+        return res.json({
+          ok: true,
+          response: statusMsg,
+          tradingAgentEnabled: isEnabled
+        });
+
+      case 'OPEN_POSITION':
+        // Check if trading agent is enabled
+        if (!tradingAgentMode.get(sessionId)) {
+          const errorMsg = `❌ Trading Agent Disabled\n\nPlease enable trading agent first by saying "enable trading agent" or "turn on trading agent".`;
+          history.push({ role: 'assistant', message: errorMsg, timestamp: Date.now() });
+          return res.json({
+            ok: true,
+            response: errorMsg
+          });
+        }
+
+        // Import required modules
+        const { TradeExecutor } = await import('../../trading/trade_executor');
+        const { TelegramBotClient } = await import('../../telegram/telegram_bot');
+        const telegramBot = TelegramBotClient.getInstance();
+        const tradeExecutor = TradeExecutor.getInstance();
+
+        // Get current market data for validation
+        const posSymbol = intent.symbol || 'BTCUSDT';
+        const posFetcher = BinanceDataFetcher.getInstance();
+        const posCandles = await posFetcher.getKlines(posSymbol, intent.timeframe || '1h', 100);
+        
+        if (!posCandles || posCandles.length < 50) {
+          return res.json({ ok: false, error: 'Insufficient market data' });
+        }
+
+        // Analyze current conditions
+        const posAnalysisEngine = AnalysisEngine.getInstance();
+        const posAnalysis = posAnalysisEngine.analyze(posSymbol, posCandles, intent.timeframe || '1h');
+        
+        if (!posAnalysis) {
+          return res.json({ ok: false, error: 'Analysis failed' });
+        }
+
+        // Validate conditions specified by user
+        const conditions: string[] = [];
+        let conditionsMet = true;
+        
+        // Check divergence condition if specified
+        if (intent.requireDivergence) {
+          const { RSIIndicator } = await import('../../analysis/indicators/rsi');
+          const closes = posCandles.map((c: any) => c.close);
+          const { RSI } = await import('technicalindicators');
+          const rsiValues = RSI.calculate({ values: closes, period: 14 });
+          const divergence = RSIIndicator.detectDivergence(closes, rsiValues);
+          
+          const side = intent.side || 'LONG';
+          if (side === 'SHORT' && divergence?.type !== 'BEARISH') {
+            conditionsMet = false;
+            conditions.push(`❌ Bearish divergence not detected`);
+          } else if (side === 'LONG' && divergence?.type !== 'BULLISH') {
+            conditionsMet = false;
+            conditions.push(`❌ Bullish divergence not detected`);
+          } else {
+            conditions.push(`✅ ${divergence?.type} divergence confirmed`);
+          }
+        }
+
+        // Check RSI overbought/oversold if specified
+        if (intent.requireRSI) {
+          const rsiValue = posAnalysis.rsi?.value || 50;
+          const side = intent.side || 'LONG';
+          
+          if (side === 'SHORT' && rsiValue < 70) {
+            conditionsMet = false;
+            conditions.push(`❌ RSI not overbought (${rsiValue.toFixed(1)})`);
+          } else if (side === 'LONG' && rsiValue > 30) {
+            conditionsMet = false;
+            conditions.push(`❌ RSI not oversold (${rsiValue.toFixed(1)})`);
+          } else {
+            conditions.push(`✅ RSI ${side === 'SHORT' ? 'overbought' : 'oversold'} (${rsiValue.toFixed(1)})`);
+          }
+        }
+
+        // Check near resistance/support if specified
+        if (intent.requireLevel) {
+          const currentPrice = posCandles[posCandles.length - 1].close;
+          const side = intent.side || 'LONG';
+          const nearThreshold = 0.005; // 0.5%
+          
+          if (side === 'SHORT') {
+            const resistance = posAnalysis.supportResistance?.nearestResistance?.price;
+            if (resistance) {
+              const distancePct = Math.abs(currentPrice - resistance) / resistance;
+              if (distancePct <= nearThreshold) {
+                conditions.push(`✅ Near resistance ($${Math.round(resistance).toLocaleString()})`);
+              } else {
+                conditionsMet = false;
+                conditions.push(`❌ Not near resistance (${(distancePct * 100).toFixed(2)}% away)`);
+              }
+            }
+          } else {
+            const support = posAnalysis.supportResistance?.nearestSupport?.price;
+            if (support) {
+              const distancePct = Math.abs(currentPrice - support) / support;
+              if (distancePct <= nearThreshold) {
+                conditions.push(`✅ Near support ($${Math.round(support).toLocaleString()})`);
+              } else {
+                conditionsMet = false;
+                conditions.push(`❌ Not near support (${(distancePct * 100).toFixed(2)}% away)`);
+              }
+            }
+          }
+        }
+
+        // Check trend if specified
+        if (intent.requireTrend) {
+          const trend = posAnalysis.trend?.direction || 'NEUTRAL';
+          const side = intent.side || 'LONG';
+          
+          if (side === 'SHORT' && trend !== 'DOWNTREND') {
+            conditionsMet = false;
+            conditions.push(`❌ Trend not down (${trend})`);
+          } else if (side === 'LONG' && trend !== 'UPTREND') {
+            conditionsMet = false;
+            conditions.push(`❌ Trend not up (${trend})`);
+          } else {
+            conditions.push(`✅ Trend ${trend}`);
+          }
+        }
+
+        // If conditions not met, inform user
+        if (!conditionsMet) {
+          const conditionsMsg = `📊 Conditions Check for ${posSymbol}\n\n${conditions.join('\n')}\n\n❌ Not all conditions met. Position not opened.`;
+          history.push({ role: 'assistant', message: conditionsMsg, timestamp: Date.now() });
+          return res.json({
+            ok: true,
+            response: conditionsMsg
+          });
+        }
+
+        // All conditions met, open position
+        const currentPrice = posCandles[posCandles.length - 1].close;
+        const side = intent.side || 'LONG';
+        const leverage = intent.leverage || 10;
+        const positionSize = intent.positionSize || 110; // USDT (min 100 + buffer for rounding)
+        
+        // Calculate stop loss and take profit
+        const stopLossPercent = intent.stopLoss || 2; // 2%
+        const takeProfitPercent = intent.takeProfit || 5; // 5%
+        
+        const stopLoss = side === 'LONG' 
+          ? currentPrice * (1 - stopLossPercent / 100)
+          : currentPrice * (1 + stopLossPercent / 100);
+        
+        const takeProfit = side === 'LONG'
+          ? currentPrice * (1 + takeProfitPercent / 100)
+          : currentPrice * (1 - takeProfitPercent / 100);
+
+        // Execute trade
+        const tradeResult = await tradeExecutor.executeTrade({
+          symbol: posSymbol,
+          side,
+          quantity: positionSize / currentPrice,
+          leverage,
+          stopLoss,
+          takeProfit
+        });
+
+        if (tradeResult.success) {
+          // Format position opened message
+          const modeLabel = tradeExecutor.isPaperMode() ? '⚠️ PAPER TRADING MODE (memory only)' : '🧪 BINANCE TESTNET MODE (mock trading)';
+          const positionMsg = `━━━━━━━━━━━━━━━━━━\n✅ POSITION OPENED\n━━━━━━━━━━━━━━━━━━\n\nSymbol: ${posSymbol}\nSide: ${side}\nEntry: $${currentPrice.toLocaleString()}\nLeverage: ${leverage}x\nSize: $${positionSize}\n\nStop Loss: $${stopLoss.toFixed(2)}\nTake Profit: $${takeProfit.toFixed(2)}\n\nConditions Met:\n${conditions.join('\n')}\n\nTrade ID: ${tradeResult.tradeId}\n${tradeResult.orderId ? `Order ID: ${tradeResult.orderId}\n` : ''}${modeLabel}\n━━━━━━━━━━━━━━━━━━`;
+          
+          history.push({ role: 'assistant', message: positionMsg, timestamp: Date.now() });
+          
+          // Store position
+          const userPositions = openPositions.get(sessionId) || [];
+          userPositions.push({
+            id: tradeResult.tradeId!,
+            symbol: posSymbol,
+            side,
+            entryPrice: currentPrice,
+            quantity: positionSize / currentPrice,
+            leverage,
+            stopLoss,
+            takeProfit,
+            openedAt: Date.now(),
+            conditions
+          });
+          openPositions.set(sessionId, userPositions);
+          logger.info('Position stored', { sessionId, positionCount: userPositions.length });
+          
+          // Send Telegram notification to configured channel
+          try {
+            const { env } = await import('../../config/env');
+            // Send without Markdown parsing to avoid special character issues
+            await telegramBot.sendMessage(env.TELEGRAM_CHANNEL_ID, positionMsg, { parse_mode: undefined });
+            logger.info('Position notification sent to Telegram', { channelId: env.TELEGRAM_CHANNEL_ID });
+          } catch (telegramError) {
+            logger.error('Failed to send Telegram notification', { error: telegramError });
+          }
+          
+          return res.json({
+            ok: true,
+            response: positionMsg,
+            tradeId: tradeResult.tradeId
+          });
+        } else {
+          const errorMsg = `❌ Failed to open position: ${tradeResult.error}`;
+          history.push({ role: 'assistant', message: errorMsg, timestamp: Date.now() });
+          return res.json({
+            ok: true,
+            response: errorMsg
+          });
+        }
+
       case 'CREATE_GOAL':
         // Check if user is referencing technical levels/conditions
         const msg = message.toLowerCase();
@@ -164,7 +474,7 @@ chatRouter.post('/', async (req: Request, res: Response) => {
           state: 'WATCHING',
           watchMode: intent.watchMode || (isDivergenceGoal ? 'CONTINUOUS' : 'ONCE'),
           notifyChannel: true,
-          autoTrade: intent.autoTrade && tradingMode === 'live',
+          autoTrade: !!(intent.autoTrade && tradingMode === 'live'),
           createdAt: new Date(),
           updatedAt: new Date(),
           triggerCount: 0,
@@ -270,15 +580,15 @@ chatRouter.post('/', async (req: Request, res: Response) => {
               if (srResult) {
                 lastAnalysis.set(sessionId, {
                   symbol,
-                  resistance: srResult.nearestResistance?.level,
-                  support: srResult.nearestSupport?.level,
+                  resistance: srResult.nearestResistance?.price,
+                  support: srResult.nearestSupport?.price,
                   timestamp: Date.now()
                 });
                 logger.info('Stored S/R levels for session', { 
                   sessionId, 
                   symbol,
-                  resistance: srResult.nearestResistance?.level,
-                  support: srResult.nearestSupport?.level
+                  resistance: srResult.nearestResistance?.price,
+                  support: srResult.nearestSupport?.price
                 });
               }
               
@@ -294,6 +604,9 @@ chatRouter.post('/', async (req: Request, res: Response) => {
               analysisResponse = analysisEngine.analyzeDivergence(symbol, candles);
               break;
             case 'QUICK':
+              analysisResponse = analysisEngine.quickAnalyze(symbol, candles);
+              break;
+            default:
               analysisResponse = analysisEngine.quickAnalyze(symbol, candles);
               break;
           }
@@ -336,10 +649,50 @@ chatRouter.post('/', async (req: Request, res: Response) => {
 
   } catch (error) {
     logger.error('Chat error', { error });
-    res.status(500).json({
+    return res.status(500).json({
       ok: false,
       response: '❌ Sorry, something went wrong. Please try again.',
       error: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });
+
+// Dedicated endpoint for trading agent toggle (called from UI switch)
+chatRouter.post('/toggle-trading-agent', async (req: Request, res: Response) => {
+  try {
+    const { sessionId, enabled } = req.body;
+
+    if (!sessionId) {
+      return res.status(400).json({ 
+        ok: false, 
+        error: 'Session ID is required' 
+      });
+    }
+
+    // Update trading agent mode
+    tradingAgentMode.set(sessionId, enabled);
+    
+    const statusMsg = enabled 
+      ? `✅ Trading Agent Enabled\n\nI can now open positions based on your analysis and conditions.`
+      : `⏸️ Trading Agent Disabled\n\nI will not open any positions until you enable trading agent again.`;
+    
+    // Store in conversation history
+    const history = conversationHistory.get(sessionId) || [];
+    history.push({ role: 'assistant', message: statusMsg, timestamp: Date.now() });
+    conversationHistory.set(sessionId, history);
+
+    return res.json({
+      ok: true,
+      response: statusMsg,
+      tradingAgentEnabled: enabled
+    });
+
+  } catch (error) {
+    logger.error('Toggle trading agent error', { error });
+    return res.status(500).json({
+      ok: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+

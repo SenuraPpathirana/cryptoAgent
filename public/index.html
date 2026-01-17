@@ -295,6 +295,66 @@
     .ticker-change.down {
       background: #ef4444;
     }
+
+    .toggle-switch {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: rgba(255, 255, 255, 0.1);
+      padding: 8px 16px;
+      border-radius: 20px;
+    }
+
+    .toggle-switch label {
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 50px;
+      height: 26px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(255, 255, 255, 0.2);
+      transition: 0.4s;
+      border-radius: 26px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 4px;
+      bottom: 4px;
+      background-color: white;
+      transition: 0.4s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background-color: #10b981;
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(24px);
+    }
   </style>
 </head>
 <body>
@@ -307,6 +367,13 @@
         </div>
       </div>
       <div class="trading-mode">
+        <div class="toggle-switch">
+          <label for="tradingAgentToggle">Trading Agent</label>
+          <label class="switch">
+            <input type="checkbox" id="tradingAgentToggle" onchange="toggleTradingAgent()">
+            <span class="slider"></span>
+          </label>
+        </div>
         <div class="mode-toggle" id="paperMode" onclick="setTradingMode('paper')">
           📄 Paper
         </div>
@@ -387,6 +454,7 @@
   <script>
     let tradingMode = 'paper';
     let ws = null;
+    let sessionId = 'session_' + Math.random().toString(36).substring(7);
 
     // Initialize
     document.addEventListener('DOMContentLoaded', () => {
@@ -395,12 +463,42 @@
       scrollToBottom();
     });
 
+    async function toggleTradingAgent() {
+      const isEnabled = document.getElementById('tradingAgentToggle').checked;
+      
+      try {
+        const response = await fetch('/api/chat/toggle-trading-agent', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': 'devkey'
+          },
+          body: JSON.stringify({ 
+            sessionId: sessionId,
+            enabled: isEnabled 
+          })
+        });
+
+        const data = await response.json();
+        
+        if (data.ok) {
+          addBotMessage(data.response || (isEnabled ? '✅ Trading Agent Enabled' : '⏸️ Trading Agent Disabled'));
+        } else {
+          console.error('Failed to toggle trading agent');
+          // Revert checkbox state
+          document.getElementById('tradingAgentToggle').checked = !isEnabled;
+        }
+      } catch (error) {
+        console.error('Error toggling trading agent:', error);
+        // Revert checkbox state
+        document.getElementById('tradingAgentToggle').checked = !isEnabled;
+      }
+    }
+
     function setTradingMode(mode) {
       tradingMode = mode;
       document.getElementById('paperMode').classList.toggle('active', mode === 'paper');
       document.getElementById('liveMode').classList.toggle('active', mode === 'live');
-      
-      addBotMessage(`Trading mode switched to: ${mode.toUpperCase()}${mode === 'live' ? ' ⚠️ Real money!' : ' (simulation)'}`);
     }
 
     function connectWebSocket() {
@@ -449,7 +547,8 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
             message, 
-            tradingMode 
+            tradingMode,
+            sessionId: sessionId
           })
         });
         

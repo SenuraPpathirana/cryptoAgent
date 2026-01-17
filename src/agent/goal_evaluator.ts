@@ -5,7 +5,6 @@ import { GoalManager } from './goal_manager';
 import { ChannelPublisher } from '../telegram/channel_publisher';
 import { GOAL_STATES, PRICE_CONDITIONS, GOAL_EVALUATION_INTERVAL_MS } from '../config/constants';
 import { BinanceDataFetcher } from '../market/binance_data_fetcher';
-import { AnalysisEngine } from '../analysis/analysis_engine';
 import { RSIIndicator } from '../analysis/indicators/rsi';
 
 const logger = createModuleLogger('GoalEvaluator');
@@ -16,7 +15,6 @@ export class GoalEvaluator {
   private priceCache: PriceCache;
   private channelPublisher: ChannelPublisher;
   private dataFetcher: BinanceDataFetcher;
-  private analysisEngine: AnalysisEngine;
   private evaluationTimer?: NodeJS.Timeout;
   private previousPrices: Map<string, number>;
   private lastDivergenceCheck: Map<string, { timestamp: number; type: string | null }>;
@@ -26,7 +24,6 @@ export class GoalEvaluator {
     this.priceCache = PriceCache.getInstance();
     this.channelPublisher = ChannelPublisher.getInstance();
     this.dataFetcher = BinanceDataFetcher.getInstance();
-    this.analysisEngine = AnalysisEngine.getInstance();
     this.previousPrices = new Map();
     this.lastDivergenceCheck = new Map();
   }

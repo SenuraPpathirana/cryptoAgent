@@ -19,14 +19,15 @@ const envSchema = z.object({
   BINANCE_API_KEY: z.string().optional(),
   BINANCE_API_SECRET: z.string().optional(),
   BINANCE_TESTNET: z.string().transform(val => val === 'true').default('true'),
-  BINANCE_WS_URL: z.string().default('wss://fstream.binance.com/ws'),
+  BINANCE_REST_BASE: z.string().default('https://testnet.binancefuture.com'),
+  BINANCE_WS_URL: z.string().default('wss://stream.binancefuture.com'),
 
   // Telegram
   TELEGRAM_BOT_TOKEN: z.string(),
   TELEGRAM_CHANNEL_ID: z.string(),
 
   // Trading
-  TRADING_MODE: z.enum(['paper', 'live']).default('paper'),
+  TRADING_MODE: z.enum(['paper', 'testnet', 'live']).default('testnet'),
   MAX_POSITION_SIZE_USDT: z.string().transform(Number).default('100'),
   DEFAULT_LEVERAGE: z.string().transform(Number).default('10'),
   REQUIRE_STOP_LOSS: z.string().transform(val => val === 'true').default('true'),

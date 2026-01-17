@@ -6,12 +6,15 @@ A sophisticated crypto trading bot that monitors price movements, manages tradin
 
 - **Real-time Price Monitoring**: WebSocket connections to Binance for live price feeds
 - **Goal-Based Alerts**: Set price targets and conditions, get notified when triggered
+- **Trading Agent**: Automatically open positions based on technical conditions (trend, divergence, RSI, support/resistance)
+- **Technical Analysis**: RSI, MACD, support/resistance, divergence detection, trend analysis
 - **Telegram Integration**: Automated alerts and trade notifications to your Telegram channel
 - **State Machine**: Robust goal lifecycle management (IDLE → WATCHING → TRIGGERED → NOTIFIED)
 - **REST API**: Manage goals programmatically
 - **Risk Management**: Built-in risk controls and position tracking
 - **Paper Trading**: Test strategies without risking capital
 - **Rate Limiting**: Anti-spam protection for notifications
+- **LLM Integration**: Natural language chat interface powered by Groq/Gemini
 
 ## Architecture
 
@@ -74,6 +77,20 @@ DELETE /goals/:id      # Delete goal
 ### Webhook (Optional)
 ```
 POST   /webhooks/tv    # TradingView webhook receiver
+```
+
+## Trading Agent
+
+The trading agent allows automated position opening based on technical conditions.
+
+**See [TRADING_AGENT.md](TRADING_AGENT.md) for complete guide.**
+
+Quick example:
+```
+1. Enable trading agent
+2. Check trend and resistance
+3. "if near resistance with bearish divergence and overbought RSI, open short"
+4. Position opens automatically if all conditions met
 ```
 
 ## Goal Structure
