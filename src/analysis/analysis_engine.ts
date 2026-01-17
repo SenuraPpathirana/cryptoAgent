@@ -208,7 +208,15 @@ export class AnalysisEngine {
     const sr = SupportResistanceDetector.detect(highs, lows, closes, opens, 50, 0.5, timeframe);
     if (!sr) return `Unable to detect support/resistance levels.`;
     
-    const priceFormatted = Math.round(currentPrice).toLocaleString();
+    // Format price with appropriate decimals (more for altcoins under $100)
+    const formatPrice = (price: number) => {
+      if (price >= 1000) return price.toFixed(0);
+      if (price >= 100) return price.toFixed(1);
+      if (price >= 1) return price.toFixed(2);
+      return price.toFixed(4);
+    };
+    
+    const priceFormatted = formatPrice(currentPrice);
     let message = `━━━━━━━━━━━━━━━━━━\n${symbol} – RESISTANCE LEVELS (${timeframe.toUpperCase()})\n━━━━━━━━━━━━━━━━━━\n\n`;
     
     message += `Price:\n$${priceFormatted}\n\n`;
@@ -217,7 +225,7 @@ export class AnalysisEngine {
     if (sr.resistance.length > 0) {
       message += `Key Resistance (Body Close):\n`;
       sr.resistance.forEach((level, idx) => {
-        const price = Math.round(level.price).toLocaleString();
+        const price = formatPrice(level.price);
         const label = idx === 0 ? ' (nearest)' : '';
         message += `• $${price}${label}\n`;
       });
@@ -228,7 +236,7 @@ export class AnalysisEngine {
     if (sr.support.length > 0) {
       message += `Support (Body Close):\n`;
       sr.support.forEach((level, idx) => {
-        const price = Math.round(level.price).toLocaleString();
+        const price = formatPrice(level.price);
         const label = idx === 0 ? ' (nearest)' : '';
         message += `• $${price}${label}\n`;
       });

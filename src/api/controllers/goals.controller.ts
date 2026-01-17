@@ -14,6 +14,7 @@ export class GoalsController {
 
   createGoal = async (req: Request, res: Response): Promise<void> => {
     try {
+      const userId = (req as any).userId;
       const dto: CreateGoalDto = req.body;
 
       // Validate required fields
@@ -25,8 +26,10 @@ export class GoalsController {
         return;
       }
 
-      const goal = await this.goalManager.createGoal(dto);
-      logger.info(`Goal created: ${goal.id}`, { symbol: goal.symbol });
+      // Add userId to the goal
+      const goalData = { ...dto, userId };
+      const goal = await this.goalManager.createGoal(goalData);
+      logger.info(`Goal created: ${goal.id}`, { symbol: goal.symbol, userId });
 
       res.status(201).json({
         success: true,
@@ -43,9 +46,11 @@ export class GoalsController {
 
   listGoals = async (req: Request, res: Response): Promise<void> => {
     try {
+      const userId = (req as any).userId;
       const { status, symbol } = req.query;
 
       const goals = await this.goalManager.listGoals({
+        userId,
         status: status as string,
         symbol: symbol as string,
       });

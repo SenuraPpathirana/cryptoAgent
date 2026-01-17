@@ -5,26 +5,58 @@ const logger = createModuleLogger('LLM');
 
 export interface LLMResponse {
   intent: {
-    action: 'CREATE_GOAL' | 'LIST_GOALS' | 'CHECK_PRICE' | 'DELETE_GOAL' | 'HELP' | 'ANALYZE_TECHNICAL' | 'UNKNOWN';
+    action: 'CREATE_GOAL' | 'LIST_GOALS' | 'CHECK_PRICE' | 'DELETE_GOAL' | 'HELP' | 'ANALYZE_TECHNICAL' | 'OPEN_POSITION' | 'TOGGLE_TRADING_AGENT' | 'VIEW_POSITIONS' | 'CLOSE_ALL_POSITIONS' | 'UNKNOWN';
     symbol?: string;
     condition?: 'ABOVE' | 'BELOW' | 'CROSSES_ABOVE' | 'CROSSES_BELOW' | 'BULLISH_DIVERGENCE' | 'BEARISH_DIVERGENCE' | 'ANY_DIVERGENCE';
     target?: number;
     watchMode?: 'ONCE' | 'CONTINUOUS' | 'RECURRING';
     autoTrade?: boolean;
     analysisType?: 'FULL' | 'QUICK' | 'RSI' | 'MACD' | 'TREND' | 'SIGNALS' | 'SUPPORT_RESISTANCE' | 'DIVERGENCE';
+    timeframe?: string;
+    // Trading-specific fields
+    side?: 'LONG' | 'SHORT';
+    leverage?: number;
+    positionSize?: number;
+    stopLoss?: number;
+    takeProfit?: number;
+    requireDivergence?: boolean;
+    requireRSI?: boolean;
+    requireLevel?: boolean;
+    requireTrend?: boolean;
   };
   response: string;
   confidence: number;
 }
 
 export class LLMService {
-  private provider: 'gemini' | 'groq' | 'none';
+  private provider: 'gemini' | 'groq' | 'github' | 'pollinations' | 'none';
+  private fallbackProvider: 'groq' | null = null;
+  private rateLimitUntil: number = 0;
   private apiKey: string;
   private model: string;
+  private groqApiKey: string;
+  private groqModel: string = 'llama-3.1-8b-instant';
 
   constructor() {
-    // Determine which provider to use based on available API keys
-    if (env.GEMINI_API_KEY) {
+    // Store Groq API key for fallback
+    this.groqApiKey = env.GROQ_API_KEY || '';
+    
+    // Determine which provider to use based on available API keys (prioritize Pollinations)
+    if (env.POLLINATIONS_API_KEY) {
+      this.provider = 'pollinations';
+      this.apiKey = env.POLLINATIONS_API_KEY;
+      this.model = 'openai';
+      logger.info(`LLM Service initialized with Pollinations (Google Gemini 2.5 Flash Lite)`);
+    } else if (env.GITHUB_TOKEN) {
+      this.provider = 'github';
+      this.apiKey = env.GITHUB_TOKEN;
+      this.model = 'gpt-4o';
+      if (this.groqApiKey) {
+        logger.info(`LLM Service initialized with GitHub Models (model: ${this.model}) with Groq fallback`);
+      } else {
+        logger.info(`LLM Service initialized with GitHub Models (model: ${this.model})`);
+      }
+    } else if (env.GEMINI_API_KEY) {
       this.provider = 'gemini';
       this.apiKey = env.GEMINI_API_KEY;
       this.model = 'gemini-2.0-flash-exp';
@@ -32,7 +64,7 @@ export class LLMService {
     } else if (env.GROQ_API_KEY) {
       this.provider = 'groq';
       this.apiKey = env.GROQ_API_KEY;
-      this.model = 'llama-3.3-70b-versatile';
+      this.model = 'llama-3.1-8b-instant'; // Faster, uses fewer tokens
       logger.info(`LLM Service initialized with Groq (model: ${this.model})`);
     } else {
       this.provider = 'none';
@@ -52,8 +84,37 @@ export class LLMService {
       const userPrompt = this.buildUserPrompt(message, context);
 
       let response;
-      if (this.provider === 'gemini') {
+      
+      // Check if we should use fallback provider (GitHub rate limited)
+      const now = Date.now();
+      if (this.provider === 'github' && this.fallbackProvider === 'groq' && now < this.rateLimitUntil) {
+        logger.info(`Using Groq fallback (GitHub rate limited until ${new Date(this.rateLimitUntil).toLocaleString()})`);
+        response = await this.callGroq(systemPrompt, userPrompt);
+      } else if (this.provider === 'pollinations') {
+        response = await this.callPollinations(systemPrompt, userPrompt);
+      } else if (this.provider === 'gemini') {
         response = await this.callGemini(systemPrompt, userPrompt);
+      } else if (this.provider === 'github') {
+        try {
+          response = await this.callGitHub(systemPrompt, userPrompt);
+          // Clear fallback if GitHub works
+          if (this.fallbackProvider) {
+            logger.info('GitHub Models API recovered, switching back from Groq fallback');
+            this.fallbackProvider = null;
+            this.rateLimitUntil = 0;
+          }
+        } catch (error) {
+          // If rate limited and Groq is available, switch to fallback
+          if (error instanceof Error && error.message.includes('rate limit') && this.groqApiKey) {
+            logger.warn('GitHub Models rate limited, switching to Groq fallback');
+            this.fallbackProvider = 'groq';
+            // Set rate limit duration (20 hours for daily limit)
+            this.rateLimitUntil = now + (20 * 60 * 60 * 1000);
+            response = await this.callGroq(systemPrompt, userPrompt);
+          } else {
+            throw error;
+          }
+        }
       } else {
         response = await this.callGroq(systemPrompt, userPrompt);
       }
@@ -63,7 +124,7 @@ export class LLMService {
       const errorMessage = error instanceof Error ? error.message : String(error);
       logger.error('LLM processing error', { 
         error: errorMessage, 
-        provider: this.provider,
+        provider: this.fallbackProvider || this.provider,
         stack: error instanceof Error ? error.stack : undefined
       });
       return null; // Fall back to basic NLP
@@ -81,6 +142,10 @@ Available actions:
 - CHECK_PRICE: User wants to know current price
 - ANALYZE_TECHNICAL: User wants technical analysis (RSI, MACD, trends, support/resistance, divergence, overbought/oversold)
 - DELETE_GOAL: User wants to remove a goal
+- TOGGLE_TRADING_AGENT: User wants to enable/disable trading agent mode
+- OPEN_POSITION: User wants to open a trading position (requires trading agent enabled)
+- VIEW_POSITIONS: User wants to see their open positions
+- CLOSE_ALL_POSITIONS: User wants to close all open positions (e.g., "close all positions", "exit all trades")
 - HELP: User needs help or asks how something works
 - UNKNOWN: Cannot determine intent
 
@@ -132,13 +197,23 @@ Technical Analysis Keywords (MATCH SPECIFIC FIRST):
 Respond ONLY with valid JSON in this exact format:
 {
   "intent": {
-    "action": "CREATE_GOAL" | "LIST_GOALS" | "CHECK_PRICE" | "ANALYZE_TECHNICAL" | "DELETE_GOAL" | "HELP" | "UNKNOWN",
+    "action": "CREATE_GOAL" | "LIST_GOALS" | "CHECK_PRICE" | "ANALYZE_TECHNICAL" | "DELETE_GOAL" | "TOGGLE_TRADING_AGENT" | "OPEN_POSITION" | "VIEW_POSITIONS" | "CLOSE_ALL_POSITIONS" | "HELP" | "UNKNOWN",
     "symbol": "BTCUSDT" (if applicable),
     "condition": "ABOVE" | "BELOW" | "CROSSES_ABOVE" | "CROSSES_BELOW" (if applicable),
     "target": 50000 (number, if applicable),
     "watchMode": "ONCE" | "CONTINUOUS" | "RECURRING" (if applicable),
     "autoTrade": false (boolean, if user mentions trading/buying/selling),
-    "analysisType": "FULL" | "QUICK" | "RSI" | "MACD" | "TREND" | "SIGNALS" (if action is ANALYZE_TECHNICAL)
+    "analysisType": "FULL" | "QUICK" | "RSI" | "MACD" | "TREND" | "SIGNALS" (if action is ANALYZE_TECHNICAL),
+    "side": "LONG" | "SHORT" (for OPEN_POSITION),
+    "leverage": 10 (optional number, default 10, for OPEN_POSITION),
+    "positionSize": 100 (optional USDT amount, default 100, for OPEN_POSITION),
+    "stopLoss": 2 (optional percent, default 2, for OPEN_POSITION),
+    "takeProfit": 5 (optional percent, default 5, for OPEN_POSITION),
+    "requireDivergence": true (boolean, if user mentions divergence condition for OPEN_POSITION),
+    "requireRSI": true (boolean, if user mentions overbought/oversold for OPEN_POSITION),
+    "requireLevel": true (boolean, if user mentions resistance/support for OPEN_POSITION),
+    "requireTrend": true (boolean, if user mentions trend direction for OPEN_POSITION),
+    "timeframe": "1h" | "15m" | "4h" | "1d" (optional, default 1h)
   },
   "response": "Friendly confirmation message for the user",
   "confidence": 0.95 (0-1 scale)
@@ -167,7 +242,22 @@ Input: "Alert me if there's any divergence near resistance for ETH"
 Output: {"intent":{"action":"CREATE_GOAL","symbol":"ETHUSDT","condition":"ANY_DIVERGENCE","watchMode":"CONTINUOUS"},"response":"I'll watch Ethereum for any divergence patterns near resistance levels.","confidence":0.93}
 
 Input: "How do you determine support and resistance?"
-Output: {"intent":{"action":"HELP"},"response":"I determine support and resistance based on where candle BODIES close, not wicks:\n\n📍 Resistance: Where bodies closed near highs (rejections with upper wicks)\n📍 Support: Where bodies closed near lows (bounces with lower wicks)\n\nFor short timeframes (1h, 15m): I look for multiple body closes at the same level (2+)\nFor long timeframes (1d, 1w): Even a single body close is significant\n\nA trend breaks when a candle closes by breaking through previous candles' wicks. The strength of each level is based on how many times bodies closed there.","confidence":0.98}`;
+Output: {"intent":{"action":"HELP"},"response":"I determine support and resistance based on where candle BODIES close, not wicks:\n\n📍 Resistance: Where bodies closed near highs (rejections with upper wicks)\n📍 Support: Where bodies closed near lows (bounces with lower wicks)\n\nFor short timeframes (1h, 15m): I look for multiple body closes at the same level (2+)\nFor long timeframes (1d, 1w): Even a single body close is significant\n\nA trend breaks when a candle closes by breaking through previous candles' wicks. The strength of each level is based on how many times bodies closed there.","confidence":0.98}
+
+Input: "Enable trading agent"
+Output: {"intent":{"action":"TOGGLE_TRADING_AGENT"},"response":"Enabling trading agent mode...","confidence":0.99}
+
+Input: "Turn off trading agent"
+Output: {"intent":{"action":"TOGGLE_TRADING_AGENT"},"response":"Disabling trading agent mode...","confidence":0.99}
+
+Input: "If near resistance with bearish divergence and overbought RSI, open short position"
+Output: {"intent":{"action":"OPEN_POSITION","symbol":"BTCUSDT","side":"SHORT","requireLevel":true,"requireDivergence":true,"requireRSI":true},"response":"Checking conditions for short position...","confidence":0.95}
+
+Input: "Open long with 20x leverage if price near support"
+Output: {"intent":{"action":"OPEN_POSITION","symbol":"BTCUSDT","side":"LONG","leverage":20,"requireLevel":true},"response":"Checking conditions for long position with 20x leverage...","confidence":0.93}
+
+Input: "Open short position on ETH"
+Output: {"intent":{"action":"OPEN_POSITION","symbol":"ETHUSDT","side":"SHORT"},"response":"Opening short position on Ethereum...","confidence":0.97}`;
   }
 
   private buildUserPrompt(message: string, context?: { tradingMode: string; conversationHistory?: Array<{ role: 'user' | 'assistant', message: string }> }): string {
@@ -305,6 +395,70 @@ Output: {"intent":{"action":"HELP"},"response":"I determine support and resistan
     throw new Error('Failed to call Gemini API after all retries');
   }
 
+  private async callPollinations(systemPrompt: string, userPrompt: string, retries = 3): Promise<string> {
+    const url = 'https://text.pollinations.ai/openai';
+    
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+        
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.apiKey}`
+          },
+          body: JSON.stringify({
+            model: this.model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt }
+            ],
+            temperature: 0.7,
+            max_tokens: 1000,
+          }),
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          
+          // Handle rate limit errors
+          if (response.status === 429) {
+            const errorMsg = errorData.error?.message || 'Rate limit exceeded';
+            throw new Error(`Pollinations API rate limit: ${errorMsg}`);
+          }
+          
+          throw new Error(`Pollinations API error: ${response.status} ${response.statusText} - ${JSON.stringify(errorData)}`);
+        }
+
+        const data = await response.json();
+        const text = data.choices?.[0]?.message?.content;
+        
+        if (!text) {
+          throw new Error(`No response from Pollinations. Response: ${JSON.stringify(data)}`);
+        }
+
+        return text;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        
+        if (attempt < retries) {
+          logger.warn(`Pollinations API call failed (attempt ${attempt}/${retries}), retrying...`, { error: errorMessage });
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+        } else {
+          logger.error('Pollinations API call failed after retries', { attempts: retries, error: errorMessage });
+          throw error;
+        }
+      }
+    }
+    
+    throw new Error('Failed to call Pollinations API after all retries');
+  }
+
   private async callGroq(systemPrompt: string, userPrompt: string, retries = 3): Promise<string> {
     const url = 'https://api.groq.com/openai/v1/chat/completions';
     
@@ -388,6 +542,82 @@ Output: {"intent":{"action":"HELP"},"response":"I determine support and resistan
     throw new Error('Failed to call Groq API after all retries');
   }
 
+  private async callGitHub(systemPrompt: string, userPrompt: string, retries = 3): Promise<string> {
+    const url = 'https://models.inference.ai.azure.com/chat/completions';
+    
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+        
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.apiKey}`
+          },
+          body: JSON.stringify({
+            model: this.model,
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt }
+            ],
+            temperature: 0.7,
+            max_tokens: 1000,
+            top_p: 1
+          }),
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeout);
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          
+          // Don't retry on authentication errors
+          if (response.status === 401 || response.status === 403) {
+            throw new Error(`GitHub Models API authentication error: ${response.status} - Check your GITHUB_TOKEN`);
+          }
+          
+          // Handle rate limit errors
+          if (response.status === 429) {
+            const errorMsg = errorData.error?.message || 'Rate limit exceeded';
+            throw new Error(`GitHub Models API rate limit: ${errorMsg}`);
+          }
+          
+          throw new Error(`GitHub Models API error: ${response.status} ${response.statusText} - ${JSON.stringify(errorData)}`);
+        }
+
+        const data = await response.json();
+        const text = data.choices?.[0]?.message?.content;
+        
+        if (!text) {
+          throw new Error(`No response from GitHub Models. Response: ${JSON.stringify(data)}`);
+        }
+
+        return text;
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        
+        // Don't retry on authentication errors
+        if (errorMessage.includes('authentication error')) {
+          throw error;
+        }
+        
+        if (attempt < retries) {
+          logger.warn(`GitHub Models API call failed (attempt ${attempt}/${retries}), retrying...`, { error: errorMessage });
+          // Wait before retry (exponential backoff)
+          await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+        } else {
+          logger.error('GitHub Models API call failed after retries', { attempts: retries, error: errorMessage });
+          throw error;
+        }
+      }
+    }
+    
+    throw new Error('Failed to call GitHub Models API after all retries');
+  }
+
   private parseLLMResponse(text: string): LLMResponse {
     try {
       // Try to extract JSON from markdown code blocks if present
@@ -401,6 +631,17 @@ Output: {"intent":{"action":"HELP"},"response":"I determine support and resistan
         if (objectMatch) {
           jsonText = objectMatch[0];
         }
+      }
+
+      // Fix common Groq JSON formatting issues ONLY
+      // Groq sometimes returns: `"response": "text","confidence":0.98` (missing space after comma before field)
+      // Only apply these fixes if we detect malformed patterns
+      const hasGroqMalformation = /\",\"(confidence|intent|response)\":/.test(jsonText) || 
+                                   /\}\s*,\s*\"(confidence|response)\":/.test(jsonText);
+      
+      if (hasGroqMalformation) {
+        // Fix missing comma before top-level fields when preceded by closing brace/bracket
+        jsonText = jsonText.replace(/(\}|\])\s*\"(confidence|response)\":/g, '$1,\n  "$2":');
       }
 
       const parsed = JSON.parse(jsonText);
@@ -422,6 +663,9 @@ Output: {"intent":{"action":"HELP"},"response":"I determine support and resistan
   }
 
   getProvider(): string {
+    if (this.fallbackProvider && Date.now() < this.rateLimitUntil) {
+      return `${this.provider} (fallback: ${this.fallbackProvider})`;
+    }
     return this.provider;
   }
 }

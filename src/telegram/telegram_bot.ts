@@ -7,14 +7,19 @@ const logger = createModuleLogger('TelegramBot');
 
 export class TelegramBotClient {
   private static instance: TelegramBotClient;
-  private bot: TelegramBot;
+  private bot: TelegramBot | null = null;
   private connected = false;
 
   private constructor() {
-    this.bot = new TelegramBot(env.TELEGRAM_BOT_TOKEN, {
-      polling: false, // We'll use webhook or manual polling if needed
-    });
-    this.initialize();
+    // Only initialize if token is provided
+    if (env.TELEGRAM_BOT_TOKEN) {
+      this.bot = new TelegramBot(env.TELEGRAM_BOT_TOKEN, {
+        polling: false, // We'll use webhook or manual polling if needed
+      });
+      this.initialize();
+    } else {
+      logger.warn('Telegram bot token not provided. Telegram notifications disabled. Users can configure per-user tokens in settings.');
+    }
   }
 
   public static getInstance(): TelegramBotClient {
@@ -25,6 +30,8 @@ export class TelegramBotClient {
   }
 
   private async initialize(): Promise<void> {
+    if (!this.bot) return;
+    
     try {
       const me = await this.bot.getMe();
       this.connected = true;
@@ -40,8 +47,8 @@ export class TelegramBotClient {
     text: string,
     options?: TelegramBot.SendMessageOptions
   ): Promise<TelegramBot.Message | null> {
-    if (!this.connected) {
-      logger.error('Telegram bot not connected');
+    if (!this.bot || !this.connected) {
+      logger.warn('Telegram bot not connected. Message not sent.');
       return null;
     }
 

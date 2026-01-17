@@ -9,6 +9,8 @@ import { healthRouter } from './routes/health.routes';
 import { goalsRouter } from './routes/goals.routes';
 import { webhooksRouter } from './routes/webhooks.routes';
 import { chatRouter } from './routes/chat.routes';
+import authRouter from './routes/auth.routes';
+import userRouter from './routes/user.routes';
 import { errorMiddleware } from './middleware/error.middleware';
 import { authMiddleware } from './middleware/auth.middleware';
 
@@ -66,7 +68,11 @@ export class APIServer {
 
     // Public routes
     this.app.use('/health', healthRouter);
+    this.app.use('/api/auth', authRouter);  // Authentication routes
     this.app.use('/api/chat', chatRouter);
+
+    // User routes (protected with JWT)
+    this.app.use('/api/user', userRouter);
 
     // Protected routes (if API key is configured)
     if (env.API_KEY) {

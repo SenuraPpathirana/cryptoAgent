@@ -1,0 +1,1322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Crypto Trading Agent - AI Assistant</title>
+
+  <style>
+    :root{
+      --bg0:#f6f7fb;
+      --bg1:#eef2ff;
+      --panel: rgba(255,255,255,.78);
+      --panel2: rgba(255,255,255,.92);
+      --stroke: rgba(15,23,42,.10);
+      --stroke2: rgba(15,23,42,.14);
+      --text: rgba(15,23,42,.92);
+      --muted: rgba(15,23,42,.65);
+      --muted2: rgba(15,23,42,.52);
+      --shadow: 0 18px 40px rgba(2,6,23,.12);
+      --shadow2: 0 10px 24px rgba(2,6,23,.10);
+      --r12: 12px;
+      --r14: 14px;
+      --r16: 16px;
+      --r18: 18px;
+      --r22: 22px;
+      --brand1:#7c3aed;
+      --brand2:#06b6d4;
+      --good:#10b981;
+      --bad:#ef4444;
+      --warn:#f59e0b;
+    }
+
+    *{ margin:0; padding:0; box-sizing:border-box; }
+    html,body{ height:100%; }
+
+    body{
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      background:
+        radial-gradient(1200px 800px at 18% 10%, rgba(124,58,237,.14), transparent 60%),
+        radial-gradient(1000px 700px at 82% 0%, rgba(6,182,212,.12), transparent 55%),
+        radial-gradient(900px 700px at 55% 92%, rgba(16,185,129,.09), transparent 60%),
+        linear-gradient(180deg, var(--bg0), var(--bg1));
+      color: var(--text);
+      overflow:hidden;
+    }
+
+    /* subtle dot texture */
+    body:before{
+      content:"";
+      position:fixed; inset:0;
+      background: radial-gradient(circle at 1px 1px, rgba(15,23,42,.07) 1px, transparent 1px);
+      background-size: 26px 26px;
+      opacity:.22;
+      pointer-events:none;
+      mix-blend-mode: multiply;
+    }
+
+    .app-container{
+      height:100vh;
+      display:flex;
+      gap:14px;
+      padding:14px;
+    }
+
+    /* Sidebar */
+    .sidebar{
+      width: 290px;
+      background: linear-gradient(180deg, rgba(255,255,255,.82), rgba(255,255,255,.70));
+      border: 1px solid var(--stroke);
+      border-radius: var(--r22);
+      box-shadow: var(--shadow2);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      display:flex;
+      flex-direction:column;
+      overflow:hidden;
+    }
+
+    .sidebar-header{
+      padding:14px;
+      border-bottom:1px solid var(--stroke);
+    }
+
+    .new-chat-btn{
+      width:100%;
+      padding:12px 14px;
+      border:1px solid var(--stroke2);
+      background: rgba(255,255,255,.75);
+      color: var(--text);
+      border-radius: var(--r16);
+      cursor:pointer;
+      display:flex;
+      align-items:center;
+      gap:10px;
+      font-size:14px;
+      font-weight: 650;
+      transition: transform .15s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease;
+      box-shadow: 0 10px 22px rgba(2,6,23,.06);
+    }
+    .new-chat-btn:hover{
+      background: rgba(255,255,255,.92);
+      transform: translateY(-1px);
+      border-color: rgba(15,23,42,.18);
+      box-shadow: 0 14px 26px rgba(2,6,23,.08);
+    }
+
+    .sidebar-content{
+      flex:1;
+      overflow:auto;
+      padding:10px;
+    }
+
+    .menu-section{ margin: 6px 0 14px; }
+
+    .menu-label{
+      padding: 8px 10px;
+      font-size: 11px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted2);
+    }
+
+    .menu-item{
+      width:100%;
+      padding:12px 12px;
+      border:1px solid transparent;
+      background: transparent;
+      color: var(--text);
+      border-radius: var(--r16);
+      cursor:pointer;
+      display:flex;
+      align-items:center;
+      gap:12px;
+      font-size:14px;
+      transition: background .15s ease, transform .15s ease, border-color .15s ease;
+      margin-bottom:6px;
+    }
+    .menu-item:hover{
+      background: rgba(255,255,255,.70);
+      transform: translateY(-1px);
+      border-color: rgba(15,23,42,.10);
+    }
+    .menu-item.active{
+      background: linear-gradient(135deg, rgba(124,58,237,.14), rgba(6,182,212,.10));
+      border-color: rgba(15,23,42,.10);
+    }
+    .menu-icon{ font-size:18px; }
+
+    .sidebar-footer{
+      border-top: 1px solid var(--stroke);
+      padding: 12px;
+      background: rgba(255,255,255,.62);
+    }
+
+    .user-profile{
+      width:100%;
+      display:flex;
+      align-items:center;
+      gap:12px;
+      padding:10px 12px;
+      border-radius: var(--r16);
+      border:1px solid var(--stroke);
+      background: rgba(255,255,255,.78);
+      cursor:pointer;
+      transition: background .15s ease, transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+      color: var(--text);
+      text-align:left;
+      box-shadow: 0 10px 22px rgba(2,6,23,.06);
+    }
+    .user-profile:hover{
+      background: rgba(255,255,255,.92);
+      transform: translateY(-1px);
+      border-color: rgba(15,23,42,.16);
+      box-shadow: 0 14px 26px rgba(2,6,23,.08);
+    }
+
+    .user-avatar{
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 30% 20%, rgba(255,255,255,.55), transparent 55%),
+        linear-gradient(135deg, var(--brand1), var(--brand2));
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight: 800;
+      letter-spacing:.02em;
+      font-size: 13px;
+      box-shadow: 0 10px 20px rgba(2,6,23,.12);
+      color: white;
+    }
+
+    .user-name{ font-size: 13.5px; font-weight: 750; }
+    .user-email{ font-size: 12px; color: var(--muted); }
+
+    .logout-btn{
+      width:100%;
+      padding: 10px;
+      background: rgba(239,68,68,.10);
+      color: rgba(15,23,42,.90);
+      border: 1px solid rgba(239,68,68,.20);
+      border-radius: var(--r16);
+      cursor:pointer;
+      font-size:14px;
+      margin-top:10px;
+      transition: transform .15s ease, background .15s ease, border-color .15s ease;
+      font-weight: 700;
+    }
+    .logout-btn:hover{
+      background: rgba(239,68,68,.14);
+      border-color: rgba(239,68,68,.28);
+      transform: translateY(-1px);
+    }
+
+    /* Main */
+    .main-content{
+      flex:1;
+      display:flex;
+      flex-direction:column;
+      border-radius: var(--r22);
+      overflow:hidden;
+      border: 1px solid var(--stroke);
+      background: rgba(255,255,255,.55);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      min-width: 0;
+    }
+
+    .header{
+      padding: 18px 18px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      gap: 12px;
+      background:
+        radial-gradient(900px 320px at 8% 0%, rgba(124,58,237,.20), transparent 60%),
+        radial-gradient(900px 320px at 92% 0%, rgba(6,182,212,.16), transparent 60%),
+        rgba(255,255,255,.62);
+      border-bottom: 1px solid var(--stroke);
+    }
+
+    .header h1{
+      font-size: 18px;
+      font-weight: 850;
+      letter-spacing: .01em;
+      color: rgba(15,23,42,.92);
+    }
+
+    .sub{
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .trading-mode{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-shrink:0;
+    }
+
+    .mode-toggle{
+      user-select:none;
+      background: rgba(255,255,255,.72);
+      border: 1px solid rgba(15,23,42,.12);
+      padding: 9px 12px;
+      border-radius: 999px;
+      cursor:pointer;
+      transition: transform .15s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease;
+      font-size: 13px;
+      color: rgba(15,23,42,.90);
+      box-shadow: 0 10px 22px rgba(2,6,23,.06);
+      font-weight: 700;
+    }
+    .mode-toggle:hover{
+      background: rgba(255,255,255,.92);
+      border-color: rgba(15,23,42,.16);
+      transform: translateY(-1px);
+      box-shadow: 0 14px 26px rgba(2,6,23,.08);
+    }
+    .mode-toggle.active{
+      background: linear-gradient(135deg, rgba(16,185,129,.18), rgba(16,185,129,.10));
+      border-color: rgba(16,185,129,.30);
+      font-weight: 850;
+    }
+
+    .status-indicator{
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--good);
+      box-shadow: 0 0 0 6px rgba(16,185,129,.16);
+      animation: pulse 1.8s infinite;
+    }
+    @keyframes pulse{
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.05); opacity: .75; }
+    }
+
+    .agent-button{
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 700;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 12px rgba(16,185,129,0.25);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .agent-button:hover{
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(16,185,129,0.35);
+    }
+    .agent-button.active{
+      background: linear-gradient(135deg, #ef4444, #dc2626);
+      box-shadow: 0 4px 12px rgba(239,68,68,0.25);
+    }
+    .agent-button.active:hover{
+      box-shadow: 0 6px 20px rgba(239,68,68,0.35);
+    }
+
+    /* Chat */
+    .chat-area{
+      flex:1;
+      overflow:auto;
+      padding: 18px 18px 8px;
+      max-width: 980px;
+      margin: 0 auto;
+      width: 100%;
+      scroll-behavior:smooth;
+    }
+
+    .message{
+      display:flex;
+      gap:12px;
+      margin: 14px 0;
+    }
+    .message.user{ flex-direction: row-reverse; }
+
+    .message-avatar{
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight: 800;
+      flex-shrink:0;
+      border: 1px solid rgba(15,23,42,.10);
+      background: rgba(255,255,255,.76);
+      box-shadow: 0 10px 20px rgba(2,6,23,.08);
+    }
+    .message.bot .message-avatar{
+      background: linear-gradient(135deg, rgba(124,58,237,.75), rgba(6,182,212,.55));
+      border-color: rgba(15,23,42,.10);
+      color: white;
+    }
+    .message.user .message-avatar{
+      background: linear-gradient(135deg, rgba(16,185,129,.70), rgba(16,185,129,.45));
+      border-color: rgba(15,23,42,.10);
+      color: white;
+    }
+
+    .message-content{
+      max-width: min(680px, 78%);
+      padding: 12px 14px;
+      border-radius: 18px;
+      line-height: 1.55;
+      color: rgba(15,23,42,.92);
+      border: 1px solid rgba(15,23,42,.10);
+      background: rgba(255,255,255,.86);
+      box-shadow: 0 12px 26px rgba(2,6,23,.08);
+    }
+    .message.user .message-content{
+      background: linear-gradient(135deg, rgba(16,185,129,.20), rgba(16,185,129,.12));
+      border-color: rgba(16,185,129,.25);
+    }
+
+    .message-content ul{ margin: 8px 0 0 18px; }
+    .message-content li{ color: var(--muted); font-size: 13.5px; }
+
+    /* Goal cards */
+    .goal-card{
+      margin-top: 10px;
+      border-radius: var(--r16);
+      padding: 12px;
+      background: rgba(2,6,23,.03);
+      border: 1px solid rgba(15,23,42,.10);
+    }
+    .goal-card-header{
+      display:flex;
+      justify-content:space-between;
+      margin-bottom: 8px;
+      font-weight: 850;
+      color: rgba(15,23,42,.88);
+    }
+    .goal-card-details{
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .goal-status{
+      padding: 2px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(15,23,42,.12);
+      background: rgba(255,255,255,.75);
+      font-size: 12px;
+      color: rgba(15,23,42,.80);
+      font-weight: 750;
+    }
+
+    /* Typing indicator */
+    .typing-indicator{
+      display:none;
+      align-items:center;
+      gap:6px;
+      padding: 10px 12px;
+      border-radius: 999px;
+      width: fit-content;
+      border: 1px solid rgba(15,23,42,.10);
+      background: rgba(255,255,255,.86);
+      box-shadow: 0 12px 26px rgba(2,6,23,.08);
+    }
+    .typing-indicator.active{ display:flex; }
+
+    .typing-dot{
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: rgba(15,23,42,.55);
+      animation: typing 1.2s infinite;
+    }
+    .typing-dot:nth-child(2){ animation-delay: .15s; }
+    .typing-dot:nth-child(3){ animation-delay: .30s; }
+    @keyframes typing{
+      0%, 60%, 100%{ transform: translateY(0); opacity:.6; }
+      30%{ transform: translateY(-7px); opacity:1; }
+    }
+
+    /* Input */
+    .input-area{
+      padding: 14px;
+      border-top: 1px solid var(--stroke);
+      background: rgba(255,255,255,.55);
+    }
+
+    .input-area-inner{
+      max-width: 980px;
+      margin: 0 auto;
+      width: 100%;
+      display:flex;
+      gap: 10px;
+      align-items:flex-end;
+    }
+
+    .input-wrapper{ flex:1; }
+
+    #message-input{
+      width: 100%;
+      min-height: 46px;
+      max-height: 160px;
+      padding: 12px 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(15,23,42,.12);
+      background: rgba(255,255,255,.90);
+      color: rgba(15,23,42,.92);
+      font-size: 14.5px;
+      outline: none;
+      resize:none;
+      box-shadow: 0 12px 26px rgba(2,6,23,.08);
+    }
+    #message-input:focus{
+      border-color: rgba(124,58,237,.35);
+      box-shadow: 0 0 0 4px rgba(124,58,237,.16), 0 12px 26px rgba(2,6,23,.08);
+    }
+
+    #send-button{
+      padding: 12px 16px;
+      border-radius: 16px;
+      border: 1px solid rgba(15,23,42,.10);
+      background: linear-gradient(135deg, rgba(124,58,237,.95), rgba(6,182,212,.90));
+      color: white;
+      font-weight: 850;
+      cursor:pointer;
+      transition: transform .15s ease, filter .15s ease, box-shadow .15s ease;
+      box-shadow: 0 14px 30px rgba(2,6,23,.10);
+    }
+    #send-button:hover{ transform: translateY(-1px); filter: brightness(1.05); }
+    #send-button:disabled{ opacity:.55; cursor:not-allowed; transform:none; }
+
+    /* Modal */
+    .modal{
+      display:none;
+      position:fixed;
+      inset:0;
+      background: rgba(2,6,23,.35);
+      z-index: 1000;
+      align-items:center;
+      justify-content:center;
+      padding: 18px;
+    }
+    .modal.active{ display:flex; }
+
+    .modal-content{
+      width: min(560px, 100%);
+      border-radius: var(--r22);
+      background: rgba(255,255,255,.92);
+      border: 1px solid rgba(15,23,42,.12);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      color: var(--text);
+      overflow:hidden;
+    }
+
+    .modal-header{
+      padding: 16px 18px;
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      border-bottom: 1px solid rgba(15,23,42,.10);
+      background:
+        radial-gradient(700px 250px at 20% 0%, rgba(124,58,237,.12), transparent 55%),
+        radial-gradient(700px 250px at 80% 0%, rgba(6,182,212,.10), transparent 55%),
+        rgba(255,255,255,.92);
+    }
+    .modal-header h2{ font-size: 16px; font-weight: 900; }
+
+    .close-modal{
+      width: 34px; height: 34px;
+      border-radius: 12px;
+      border: 1px solid rgba(15,23,42,.12);
+      background: rgba(255,255,255,.85);
+      color: rgba(15,23,42,.85);
+      cursor:pointer;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size: 18px;
+      transition: transform .15s ease, background .15s ease;
+    }
+    .close-modal:hover{ background: rgba(255,255,255,.98); transform: translateY(-1px); }
+
+    .modal-content form{ padding: 16px 18px 18px; }
+
+    .form-group{ margin-bottom: 14px; }
+    .form-group label{
+      display:block;
+      margin-bottom: 7px;
+      color: rgba(15,23,42,.75);
+      font-size: 13px;
+      font-weight: 750;
+    }
+    .form-group input, .form-group select{
+      width:100%;
+      padding: 12px 12px;
+      border-radius: 14px;
+      background: rgba(255,255,255,.96);
+      border: 1px solid rgba(15,23,42,.12);
+      color: rgba(15,23,42,.92);
+      font-size: 14px;
+      outline:none;
+      box-shadow: 0 10px 22px rgba(2,6,23,.06);
+    }
+    .form-group input:focus, .form-group select:focus{
+      border-color: rgba(6,182,212,.35);
+      box-shadow: 0 0 0 4px rgba(6,182,212,.14), 0 10px 22px rgba(2,6,23,.06);
+    }
+    .form-group small{
+      display:block;
+      margin-top: 6px;
+      font-size: 12px;
+      color: rgba(15,23,42,.58);
+    }
+    .form-group a{ color: rgba(6,182,212,1); text-decoration:none; font-weight: 700; }
+    .form-group a:hover{ text-decoration: underline; }
+
+    .checkbox-group{
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+    .checkbox-group input[type="checkbox"]{ width: 16px; height: 16px; }
+
+    .btn-save{
+      width:100%;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(15,23,42,.10);
+      background: linear-gradient(135deg, rgba(124,58,237,.95), rgba(6,182,212,.90));
+      color:white;
+      font-weight: 900;
+      cursor:pointer;
+      transition: transform .15s ease, filter .15s ease;
+      box-shadow: 0 14px 30px rgba(2,6,23,.10);
+    }
+    .btn-save:hover{ transform: translateY(-1px); filter: brightness(1.05); }
+
+    .status-message{
+      margin: 14px 18px 0;
+      padding: 10px 12px;
+      border-radius: 14px;
+      font-size: 13px;
+      border: 1px solid rgba(15,23,42,.10);
+      background: rgba(255,255,255,.92);
+      box-shadow: 0 10px 22px rgba(2,6,23,.06);
+    }
+    .status-message.success{
+      border-color: rgba(16,185,129,.25);
+      background: rgba(16,185,129,.10);
+      color: rgba(15,23,42,.90);
+      font-weight: 750;
+    }
+    .status-message.error{
+      border-color: rgba(239,68,68,.25);
+      background: rgba(239,68,68,.10);
+      color: rgba(15,23,42,.90);
+      font-weight: 750;
+    }
+
+    /* Scrollbars */
+    .sidebar-content::-webkit-scrollbar,
+    .chat-area::-webkit-scrollbar{
+      width: 10px;
+    }
+    .sidebar-content::-webkit-scrollbar-thumb,
+    .chat-area::-webkit-scrollbar-thumb{
+      background: rgba(15,23,42,.10);
+      border-radius: 999px;
+      border: 2px solid rgba(0,0,0,0);
+      background-clip: padding-box;
+    }
+    .sidebar-content::-webkit-scrollbar-thumb:hover,
+    .chat-area::-webkit-scrollbar-thumb:hover{
+      background: rgba(15,23,42,.16);
+    }
+
+    /* Responsive */
+    @media (max-width: 920px){
+      .app-container{ padding:10px; gap:10px; }
+      .sidebar{ width: 88px; }
+      .menu-label, .user-info, .new-chat-btn span:nth-child(2){ display:none; }
+      .new-chat-btn{ justify-content:center; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app-container">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <button class="new-chat-btn" onclick="location.reload()">
+          <span>➕</span>
+          <span>New chat</span>
+        </button>
+      </div>
+
+      <div class="sidebar-content">
+        <div class="menu-section">
+          <div class="menu-label">Configuration</div>
+          <button class="menu-item" onclick="openTelegramSettings()">
+            <span class="menu-icon">📱</span>
+            <span>Telegram Settings</span>
+          </button>
+          <button class="menu-item" onclick="openBinanceSettings()">
+            <span class="menu-icon">💰</span>
+            <span>Binance Settings</span>
+          </button>
+          <button class="menu-item" onclick="openTradingSettings()">
+            <span class="menu-icon">⚙️</span>
+            <span>Trading Preferences</span>
+          </button>
+        </div>
+
+        <div class="menu-section">
+          <div class="menu-label">Trading</div>
+          <button class="menu-item" onclick="quickAction('Show my active goals')">
+            <span class="menu-icon">🎯</span>
+            <span>My Goals</span>
+          </button>
+          <button class="menu-item" onclick="quickAction('Show my positions')">
+            <span class="menu-icon">📊</span>
+            <span>Open Positions</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="sidebar-footer">
+        <button class="user-profile" id="userProfile">
+          <div class="user-avatar" id="userAvatar">U</div>
+          <div class="user-info">
+            <div class="user-name" id="userName">Loading...</div>
+            <div class="user-email" id="userEmail"></div>
+          </div>
+        </button>
+        <button class="logout-btn" onclick="logout()">Logout</button>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <div class="header">
+        <div>
+          <h1>🤖 Crypto Trading AI Assistant</h1>
+          <div class="sub">Natural language trading interface</div>
+        </div>
+        <div class="trading-mode">
+          <div class="mode-toggle" id="paperMode" onclick="setTradingMode('paper')">
+            📄 Paper
+          </div>
+          <div class="mode-toggle" id="liveMode" onclick="setTradingMode('live')">
+            🔴 Live
+          </div>
+          <button class="agent-button" id="agentButton" onclick="toggleAgent()">
+            <span>▶️</span>
+            <span id="agentButtonText">Start Agent</span>
+          </button>
+          <div class="status-indicator"></div>
+        </div>
+      </div>
+
+      <div class="chat-area" id="chatArea">
+        <div class="message bot">
+          <div class="message-avatar">🤖</div>
+          <div class="message-content">
+            <div>👋 Hi! I'm your crypto trading assistant powered by AI.</div>
+            <div style="margin-top: 8px;">I can help you:</div>
+            <ul>
+              <li>Set price alerts (e.g., "Alert me when BTC hits $50k")</li>
+              <li>Analyze technical indicators and trends</li>
+              <li>Open trading positions (when enabled)</li>
+              <li>Monitor your goals and positions</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="message bot">
+          <div class="message-avatar">🤖</div>
+          <div class="typing-indicator" id="typingIndicator">
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+            <div class="typing-dot"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="input-area">
+        <div class="input-area-inner">
+          <div class="input-wrapper">
+            <textarea
+              id="message-input"
+              rows="1"
+              placeholder="Send a message..."
+              onkeypress="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); }"
+            ></textarea>
+          </div>
+          <button id="send-button" onclick="sendMessage()">Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Telegram Settings Modal -->
+  <div class="modal" id="telegramModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>📱 Telegram Settings</h2>
+        <button class="close-modal" onclick="closeModal('telegramModal')">×</button>
+      </div>
+      <div id="telegramStatus"></div>
+      <form id="telegramForm" onsubmit="saveTelegramSettings(event)">
+        <div class="form-group">
+          <label for="telegram-token">Bot Token</label>
+          <input type="text" id="telegram-token" placeholder="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz">
+          <small>Get from <a href="https://t.me/botfather" target="_blank">@BotFather</a> on Telegram</small>
+        </div>
+        <div class="form-group">
+          <label for="telegram-channel">Channel ID</label>
+          <input type="text" id="telegram-channel" placeholder="-1001234567890">
+          <small>Your channel ID (starts with -100)</small>
+        </div>
+        <button type="submit" class="btn-save">Save Changes</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Binance Settings Modal -->
+  <div class="modal" id="binanceModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>💰 Binance Settings</h2>
+        <button class="close-modal" onclick="closeModal('binanceModal')">×</button>
+      </div>
+      <div id="binanceStatus"></div>
+      <form id="binanceForm" onsubmit="saveBinanceSettings(event)">
+        <div class="form-group">
+          <label for="binance-key">API Key</label>
+          <input type="text" id="binance-key" placeholder="Your Binance API Key">
+        </div>
+        <div class="form-group">
+          <label for="binance-secret">API Secret</label>
+          <input type="password" id="binance-secret" placeholder="Your Binance API Secret">
+          <small>Get from <a href="https://www.binance.com/en/my/settings/api-management" target="_blank">Binance API Management</a></small>
+        </div>
+        <div class="form-group checkbox-group">
+          <input type="checkbox" id="binance-testnet" checked>
+          <label for="binance-testnet">Use Testnet (recommended)</label>
+        </div>
+        <button type="submit" class="btn-save">Save Changes</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Trading Settings Modal -->
+  <div class="modal" id="tradingModal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>⚙️ Trading Preferences</h2>
+        <button class="close-modal" onclick="closeModal('tradingModal')">×</button>
+      </div>
+      <div id="tradingStatus"></div>
+      <form id="tradingForm" onsubmit="saveTradingSettings(event)">
+        <div class="form-group">
+          <label for="trading-mode-select">Trading Mode</label>
+          <select id="trading-mode-select">
+            <option value="paper">Paper Trading</option>
+            <option value="testnet">Testnet</option>
+            <option value="live">Live Trading</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="default-leverage">Default Leverage</label>
+          <input type="number" id="default-leverage" min="1" max="125" value="10">
+        </div>
+        <div class="form-group">
+          <label for="max-position">Max Position Size (USDT)</label>
+          <input type="number" id="max-position" min="10" step="10" value="100">
+        </div>
+        <button type="submit" class="btn-save">Save Changes</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    let tradingMode = 'paper';
+    let ws = null;
+    let sessionId = 'session_' + Math.random().toString(36).substring(7);
+    let authToken = localStorage.getItem('authToken');
+    let currentUser = null;
+
+    console.log('Chat.html loaded. Auth token exists:', !!authToken);
+    console.log('Auth token value:', authToken ? authToken.substring(0, 20) + '...' : 'null');
+
+    // Check auth on load
+    if (!authToken) {
+      console.log('No auth token found, redirecting to login');
+      window.location.href = '/';
+    } else {
+      console.log('Auth token found, staying on page');
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+      loadUserProfile();
+      setTradingMode('paper');
+      connectWebSocket();
+      scrollToBottom();
+      enableAutoGrowTextarea();
+    });
+
+    function enableAutoGrowTextarea(){
+      const ta = document.getElementById('message-input');
+      const resize = () => {
+        ta.style.height = 'auto';
+        ta.style.height = Math.min(160, ta.scrollHeight) + 'px';
+      };
+      ta.addEventListener('input', resize);
+      resize();
+    }
+
+    // Load user profile
+    async function loadUserProfile() {
+      try {
+        console.log('Verifying auth token...');
+        const response = await fetch('/api/auth/verify', {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+
+        if (!response.ok) {
+          console.error('Auth verification failed with status:', response.status);
+          logout();
+          return;
+        }
+
+        const data = await response.json();
+        console.log('Auth verification response:', data);
+
+        if (data.valid && data.user) {
+          currentUser = data.user;
+          document.getElementById('userName').textContent = data.user.username || 'User';
+          document.getElementById('userEmail').textContent = data.user.email || '';
+          document.getElementById('userAvatar').textContent =
+            (data.user.username || data.user.email || 'U').charAt(0).toUpperCase();
+          console.log('User profile loaded successfully:', data.user.email);
+        } else {
+          console.error('Invalid auth response:', data);
+          logout();
+        }
+      } catch (error) {
+        console.error('Failed to load user profile:', error);
+        document.getElementById('userName').textContent = 'Error loading profile';
+        document.getElementById('userEmail').textContent = 'Click to retry';
+      }
+    }
+
+    // Logout
+    function logout() {
+      localStorage.removeItem('authToken');
+      window.location.href = '/';
+    }
+
+    // Modal functions
+    function openTelegramSettings() {
+      document.getElementById('telegramModal').classList.add('active');
+      loadTelegramConfig();
+    }
+
+    function openBinanceSettings() {
+      document.getElementById('binanceModal').classList.add('active');
+      loadBinanceConfig();
+    }
+
+    function openTradingSettings() {
+      document.getElementById('tradingModal').classList.add('active');
+      loadTradingConfig();
+    }
+
+    function closeModal(modalId) {
+      document.getElementById(modalId).classList.remove('active');
+    }
+
+    // Load configs
+    async function loadTelegramConfig() {
+      try {
+        const response = await fetch('/api/user/config', {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        const data = await response.json();
+
+        if (data.telegram_configured) {
+          document.getElementById('telegram-token').value = '••••••••••••••••';
+          document.getElementById('telegram-channel').value = data.telegram_channel_id || '';
+        }
+      } catch (error) {
+        console.error('Failed to load Telegram config:', error);
+      }
+    }
+
+    async function loadBinanceConfig() {
+      try {
+        const response = await fetch('/api/user/config', {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        const data = await response.json();
+
+        if (data.binance_configured) {
+          document.getElementById('binance-key').value = '••••••••••••••••';
+          document.getElementById('binance-secret').value = '••••••••••••••••';
+          document.getElementById('binance-testnet').checked = !!data.binance_testnet;
+        }
+      } catch (error) {
+        console.error('Failed to load Binance config:', error);
+      }
+    }
+
+    async function loadTradingConfig() {
+      try {
+        const response = await fetch('/api/user/config', {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        const data = await response.json();
+
+        document.getElementById('trading-mode-select').value = data.trading_mode || 'paper';
+        document.getElementById('default-leverage').value = data.default_leverage || 10;
+        document.getElementById('max-position').value = data.max_position_size_usdt || 100;
+      } catch (error) {
+        console.error('Failed to load trading config:', error);
+      }
+    }
+
+    // Save configs
+    async function saveTelegramSettings(event) {
+      event.preventDefault();
+      const statusDiv = document.getElementById('telegramStatus');
+
+      try {
+        const response = await fetch('/api/user/config/telegram', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({
+            telegram_bot_token: document.getElementById('telegram-token').value,
+            telegram_channel_id: document.getElementById('telegram-channel').value
+          })
+        });
+
+        if (response.ok) {
+          statusDiv.innerHTML = '<div class="status-message success">✓ Telegram settings saved successfully!</div>';
+          setTimeout(() => closeModal('telegramModal'), 1200);
+        } else {
+          statusDiv.innerHTML = '<div class="status-message error">✗ Failed to save settings</div>';
+        }
+      } catch (error) {
+        statusDiv.innerHTML = '<div class="status-message error">✗ Network error</div>';
+      }
+    }
+
+    async function saveBinanceSettings(event) {
+      event.preventDefault();
+      const statusDiv = document.getElementById('binanceStatus');
+
+      try {
+        console.log('Saving Binance settings...');
+        const apiKey = document.getElementById('binance-key').value;
+        const apiSecret = document.getElementById('binance-secret').value;
+        const testnet = document.getElementById('binance-testnet').checked;
+        
+        console.log('API Key length:', apiKey.length);
+        console.log('API Secret length:', apiSecret.length);
+        console.log('Testnet:', testnet);
+        
+        const response = await fetch('/api/user/config/binance', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({
+            binance_api_key: apiKey,
+            binance_api_secret: apiSecret,
+            binance_testnet: testnet
+          })
+        });
+
+        console.log('Response status:', response.status);
+        const data = await response.json();
+        console.log('Response data:', data);
+
+        if (response.ok) {
+          statusDiv.innerHTML = '<div class="status-message success">✓ Binance settings saved successfully!</div>';
+          setTimeout(() => closeModal('binanceModal'), 1200);
+        } else {
+          const errorMsg = data.error || 'Failed to save settings';
+          console.error('Save failed:', errorMsg);
+          statusDiv.innerHTML = `<div class="status-message error">✗ ${errorMsg}</div>`;
+        }
+      } catch (error) {
+        console.error('Network error:', error);
+        statusDiv.innerHTML = '<div class="status-message error">✗ Network error</div>';
+      }
+    }
+
+    async function saveTradingSettings(event) {
+      event.preventDefault();
+      const statusDiv = document.getElementById('tradingStatus');
+
+      try {
+        const response = await fetch('/api/user/config/trading', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({
+            trading_mode: document.getElementById('trading-mode-select').value,
+            default_leverage: parseInt(document.getElementById('default-leverage').value, 10),
+            max_position_size_usdt: parseFloat(document.getElementById('max-position').value)
+          })
+        });
+
+        if (response.ok) {
+          statusDiv.innerHTML = '<div class="status-message success">✓ Trading settings saved successfully!</div>';
+          setTimeout(() => closeModal('tradingModal'), 1200);
+        } else {
+          statusDiv.innerHTML = '<div class="status-message error">✗ Failed to save settings</div>';
+        }
+      } catch (error) {
+        statusDiv.innerHTML = '<div class="status-message error">✗ Network error</div>';
+      }
+    }
+
+    function setTradingMode(mode) {
+      tradingMode = mode;
+      document.getElementById('paperMode').classList.toggle('active', mode === 'paper');
+      document.getElementById('liveMode').classList.toggle('active', mode === 'live');
+    }
+
+    let agentRunning = false;
+
+    async function toggleAgent() {
+      const button = document.getElementById('agentButton');
+      const buttonText = document.getElementById('agentButtonText');
+      
+      if (!agentRunning) {
+        // Enable the agent
+        agentRunning = true;
+        button.classList.add('active');
+        button.querySelector('span:first-child').textContent = '⏸️';
+        buttonText.textContent = 'Stop Agent';
+        
+        // Show message in chat immediately
+        addMessage('bot', '✅ Trading Agent Enabled\n\nThe trading agent is now active and ready to execute trades in ' + tradingMode + ' mode. You can now open positions, set alerts, and manage trades.');
+        
+        // Store state in session
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'agent_state',
+            enabled: true,
+            mode: tradingMode
+          }));
+        }
+      } else {
+        // Disable the agent
+        agentRunning = false;
+        button.classList.remove('active');
+        button.querySelector('span:first-child').textContent = '▶️';
+        buttonText.textContent = 'Start Agent';
+        
+        // Show message in chat immediately
+        addMessage('bot', '⏸️ Trading Agent Disabled\n\nThe trading agent has been stopped. Manual control resumed.');
+        
+        // Store state in session
+        if (ws && ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({
+            type: 'agent_state',
+            enabled: false
+          }));
+        }
+      }
+    }
+
+    function connectWebSocket() {
+      ws = new WebSocket('ws://localhost:3000/ws');
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'price') {
+          updatePriceTicker(data.prices);
+        }
+      };
+
+      ws.onerror = () => console.log('WebSocket error');
+      ws.onclose = () => setTimeout(connectWebSocket, 3000);
+    }
+
+    // Keeping your function; safe even if price ticker elements are not present
+    function updatePriceTicker(prices) {
+      const btc = document.getElementById('btc-price');
+      const eth = document.getElementById('eth-price');
+      const bnb = document.getElementById('bnb-price');
+
+      if (btc && prices.BTCUSDT) btc.textContent = '$' + prices.BTCUSDT.toLocaleString();
+      if (eth && prices.ETHUSDT) eth.textContent = '$' + prices.ETHUSDT.toLocaleString();
+      if (bnb && prices.BNBUSDT) bnb.textContent = '$' + prices.BNBUSDT.toLocaleString();
+    }
+
+    async function sendMessage() {
+      const input = document.getElementById('message-input');
+      const message = input.value.trim();
+
+      if (!message) return;
+
+      addUserMessage(message);
+      input.value = '';
+      input.style.height = '46px';
+
+      showTyping();
+
+      try {
+        console.log('Sending message:', message);
+        console.log('Auth token exists:', !!authToken);
+        
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({
+            message,
+            tradingMode,
+            sessionId: sessionId,
+            agentEnabled: agentRunning
+          })
+        });
+
+        console.log('Response status:', response.status);
+        
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.error('Error response:', errorData);
+          hideTyping();
+          addBotMessage(`❌ Error: ${errorData.error || 'Failed to send message'}`);
+          return;
+        }
+
+        const data = await response.json();
+        console.log('Response data:', data);
+        hideTyping();
+        addBotMessage(data.response, data.goal, data.goals);
+      } catch (error) {
+        console.error('Chat error:', error);
+        hideTyping();
+        addBotMessage('❌ Sorry, I encountered an error. Please try again.');
+      }
+    }
+
+    function quickAction(message) {
+      document.getElementById('message-input').value = message;
+      sendMessage();
+    }
+
+    function addUserMessage(text) {
+      const chatArea = document.getElementById('chatArea');
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'message user';
+      messageDiv.innerHTML = `
+        <div class="message-avatar">👤</div>
+        <div class="message-content">${escapeHtml(text)}</div>
+      `;
+      chatArea.insertBefore(messageDiv, chatArea.lastElementChild);
+      scrollToBottom();
+    }
+
+    function addBotMessage(text, goal = null, goals = null) {
+      const chatArea = document.getElementById('chatArea');
+      const messageDiv = document.createElement('div');
+      messageDiv.className = 'message bot';
+
+      let goalCard = '';
+
+      if (goal) {
+        goalCard = `
+          <div class="goal-card">
+            <div class="goal-card-header">
+              <span>✅ Goal Created</span>
+              <span>${escapeHtml(String(goal.symbol || ''))}</span>
+            </div>
+            <div class="goal-card-details">
+              ${escapeHtml(String(goal.condition || ''))} $${(goal.targetPrice ?? goal.target) ? Number(goal.targetPrice ?? goal.target).toLocaleString() : 'N/A'}<br>
+              Mode: ${escapeHtml(String(goal.watchMode || goal.mode || ''))} | Auto-trade: ${goal.autoTrade ? 'Yes' : 'No'}<br>
+              <small>ID: ${escapeHtml(String(goal.id || ''))}</small>
+            </div>
+          </div>
+        `;
+      }
+
+      if (goals && goals.length > 0) {
+        goalCard = goals.map(g => `
+          <div class="goal-card">
+            <div class="goal-card-header">
+              <span>📊 ${escapeHtml(String(g.symbol || ''))}</span>
+              <span class="goal-status">${escapeHtml(String(g.state || ''))}</span>
+            </div>
+            <div class="goal-card-details">
+              ${escapeHtml(String(g.condition || ''))} $${g.targetPrice ? Number(g.targetPrice).toLocaleString() : 'N/A'}<br>
+              Mode: ${escapeHtml(String(g.watchMode || ''))} | Triggers: ${escapeHtml(String(g.triggerCount || 0))}<br>
+              <small>ID: ${escapeHtml(String(g.id || ''))}</small>
+            </div>
+          </div>
+        `).join('');
+      } else if (goals && goals.length === 0) {
+        goalCard = `
+          <div class="goal-card">
+            <div class="goal-card-header">
+              <span>📭 No active goals</span>
+              <span class="goal-status">Empty</span>
+            </div>
+            <div class="goal-card-details">
+              Create one by saying: <em>"Alert me when BTC hits $50000"</em>
+            </div>
+          </div>
+        `;
+      }
+
+      messageDiv.innerHTML = `
+        <div class="message-avatar">🤖</div>
+        <div class="message-content">${escapeHtml(text || '')}${goalCard}</div>
+      `;
+      chatArea.insertBefore(messageDiv, chatArea.lastElementChild);
+      scrollToBottom();
+    }
+
+    function showTyping() {
+      document.getElementById('typingIndicator').classList.add('active');
+      scrollToBottom();
+    }
+
+    function hideTyping() {
+      document.getElementById('typingIndicator').classList.remove('active');
+    }
+
+    function scrollToBottom() {
+      const chatArea = document.getElementById('chatArea');
+      chatArea.scrollTop = chatArea.scrollHeight;
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

@@ -15,18 +15,19 @@ const envSchema = z.object({
   // Database
   DATABASE_URL: z.string(),
 
-  // Binance
+  // Binance (now per-user, optional here)
   BINANCE_API_KEY: z.string().optional(),
   BINANCE_API_SECRET: z.string().optional(),
   BINANCE_TESTNET: z.string().transform(val => val === 'true').default('true'),
-  BINANCE_WS_URL: z.string().default('wss://fstream.binance.com/ws'),
+  BINANCE_REST_BASE: z.string().default('https://testnet.binancefuture.com'),
+  BINANCE_WS_URL: z.string().default('wss://stream.binancefuture.com'),
 
-  // Telegram
-  TELEGRAM_BOT_TOKEN: z.string(),
-  TELEGRAM_CHANNEL_ID: z.string(),
+  // Telegram (now per-user, optional here)
+  TELEGRAM_BOT_TOKEN: z.string().optional(),
+  TELEGRAM_CHANNEL_ID: z.string().optional(),
 
   // Trading
-  TRADING_MODE: z.enum(['paper', 'live']).default('paper'),
+  TRADING_MODE: z.enum(['paper', 'testnet', 'live']).default('testnet'),
   MAX_POSITION_SIZE_USDT: z.string().transform(Number).default('100'),
   DEFAULT_LEVERAGE: z.string().transform(Number).default('10'),
   REQUIRE_STOP_LOSS: z.string().transform(val => val === 'true').default('true'),
@@ -42,10 +43,13 @@ const envSchema = z.object({
 
   // API Security
   API_KEY: z.string().optional(),
+  JWT_SECRET: z.string().default('change-this-in-production-' + Math.random().toString(36)),
 
   // LLM APIs (for enhanced chat)
+  POLLINATIONS_API_KEY: z.string().optional(),
   GEMINI_API_KEY: z.string().optional(),
   GROQ_API_KEY: z.string().optional(),
+  GITHUB_TOKEN: z.string().optional(),
 
   // Monitoring
   HEALTH_CHECK_INTERVAL_MS: z.string().transform(Number).default('30000'),

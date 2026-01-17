@@ -1,13 +1,23 @@
 
 
 export interface ParsedIntent {
-  action: 'CREATE_GOAL' | 'LIST_GOALS' | 'CHECK_PRICE' | 'DELETE_GOAL' | 'HELP' | 'ANALYZE_TECHNICAL' | 'UNKNOWN';
+  action: 'CREATE_GOAL' | 'LIST_GOALS' | 'CHECK_PRICE' | 'DELETE_GOAL' | 'HELP' | 'ANALYZE_TECHNICAL' | 'OPEN_POSITION' | 'TOGGLE_TRADING_AGENT' | 'VIEW_POSITIONS' | 'CLOSE_ALL_POSITIONS' | 'UNKNOWN';
   symbol?: string;
-  condition?: 'ABOVE' | 'BELOW' | 'CROSSES_ABOVE' | 'CROSSES_BELOW';
+  condition?: 'ABOVE' | 'BELOW' | 'CROSSES_ABOVE' | 'CROSSES_BELOW' | 'BULLISH_DIVERGENCE' | 'BEARISH_DIVERGENCE' | 'ANY_DIVERGENCE';
   target?: number;
   watchMode?: 'ONCE' | 'CONTINUOUS' | 'RECURRING';
   autoTrade?: boolean;
   analysisType?: 'FULL' | 'QUICK' | 'RSI' | 'MACD' | 'TREND' | 'SIGNALS' | 'SUPPORT_RESISTANCE' | 'DIVERGENCE';
+  timeframe?: string;
+  side?: 'LONG' | 'SHORT';
+  leverage?: number;
+  positionSize?: number;
+  stopLoss?: number;
+  takeProfit?: number;
+  requireDivergence?: boolean;
+  requireRSI?: boolean;
+  requireLevel?: boolean;
+  requireTrend?: boolean;
   confidence: number;
 }
 

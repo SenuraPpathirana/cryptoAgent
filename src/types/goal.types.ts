@@ -12,6 +12,7 @@ export type WatchMode = typeof WATCH_MODES[keyof typeof WATCH_MODES];
 // Base Goal interface
 export interface Goal {
   id: string;
+  userId: number;
   symbol: string;
   condition: PriceCondition;
   targetPrice: number;
@@ -77,6 +78,7 @@ export interface UpdateGoalDto {
 
 // Goal filter
 export interface GoalFilter {
+  userId?: number;
   status?: string;
   symbol?: string;
   state?: GoalState;

@@ -207,7 +207,7 @@ export class SupportResistanceDetector {
           // Strength based on number of body closes
           const strength = Math.min(100, value.bodyCloses * 25);
           levelArray.push({
-            price: Math.round(avgPrice * 100) / 100,
+            price: Math.round(avgPrice * 10000) / 10000, // Round to 4 decimals for better precision
             strength,
             touches: value.touches,
             bodyCloses: value.bodyCloses,

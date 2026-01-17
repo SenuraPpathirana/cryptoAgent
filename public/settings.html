@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings - Crypto Trading Agent</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f7fa;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 20px 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            color: #333;
+            font-size: 24px;
+        }
+
+        .header .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .header .user-email {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .btn-logout {
+            padding: 8px 16px;
+            background: #f44336;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        .btn-back {
+            padding: 8px 16px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .section {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        .section h2 {
+            color: #333;
+            font-size: 20px;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 15px;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn-save {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        .btn-save:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+
+        .status-configured {
+            background: #4caf50;
+            color: white;
+        }
+
+        .status-not-configured {
+            background: #ff9800;
+            color: white;
+        }
+
+        .message {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+
+        .message.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .message.error {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .help-text {
+            font-size: 13px;
+            color: #666;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>⚙️ Settings</h1>
+            <div class="user-info">
+                <span class="user-email" id="user-email"></span>
+                <a href="/" class="btn-back">← Back to Chat</a>
+                <button class="btn-logout" onclick="logout()">Logout</button>
+            </div>
+        </div>
+
+        <!-- Telegram Configuration -->
+        <div class="section">
+            <h2>
+                📱 Telegram Configuration
+                <span class="status-badge status-not-configured" id="telegram-status">Not Configured</span>
+            </h2>
+            <div class="message hidden" id="telegram-message"></div>
+            <form id="telegram-form">
+                <div class="form-group">
+                    <label for="telegram-token">Bot Token</label>
+                    <input type="text" id="telegram-token" placeholder="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz" required>
+                    <div class="help-text">Get your bot token from @BotFather on Telegram</div>
+                </div>
+                <div class="form-group">
+                    <label for="telegram-channel">Channel ID</label>
+                    <input type="text" id="telegram-channel" placeholder="-1001234567890" required>
+                    <div class="help-text">Your Telegram channel ID (starts with -100)</div>
+                </div>
+                <button type="submit" class="btn-save">Save Telegram Config</button>
+            </form>
+        </div>
+
+        <!-- Binance Configuration -->
+        <div class="section">
+            <h2>
+                💰 Binance Configuration
+                <span class="status-badge status-not-configured" id="binance-status">Not Configured</span>
+            </h2>
+            <div class="message hidden" id="binance-message"></div>
+            <form id="binance-form">
+                <div class="form-group">
+                    <label for="binance-api-key">API Key</label>
+                    <input type="text" id="binance-api-key" placeholder="Your Binance API Key" required>
+                </div>
+                <div class="form-group">
+                    <label for="binance-api-secret">API Secret</label>
+                    <input type="password" id="binance-api-secret" placeholder="Your Binance API Secret" required>
+                </div>
+                <div class="form-group">
+                    <label for="binance-testnet">Trading Environment</label>
+                    <select id="binance-testnet">
+                        <option value="true">Testnet (Recommended)</option>
+                        <option value="false">Live Trading</option>
+                    </select>
+                    <div class="help-text">Always test with testnet first!</div>
+                </div>
+                <button type="submit" class="btn-save">Save Binance Config</button>
+            </form>
+        </div>
+
+        <!-- Trading Preferences -->
+        <div class="section">
+            <h2>📊 Trading Preferences</h2>
+            <div class="message hidden" id="trading-message"></div>
+            <form id="trading-form">
+                <div class="form-group">
+                    <label for="trading-mode">Trading Mode</label>
+                    <select id="trading-mode">
+                        <option value="paper">Paper Trading</option>
+                        <option value="testnet">Testnet</option>
+                        <option value="live">Live Trading</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="default-leverage">Default Leverage</label>
+                    <input type="number" id="default-leverage" min="1" max="125" value="10" required>
+                    <div class="help-text">1-125x leverage (use caution with high leverage)</div>
+                </div>
+                <div class="form-group">
+                    <label for="max-position-size">Max Position Size (USDT)</label>
+                    <input type="number" id="max-position-size" min="10" value="1000" required>
+                    <div class="help-text">Maximum USDT per trade</div>
+                </div>
+                <button type="submit" class="btn-save">Save Trading Preferences</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const token = localStorage.getItem('auth_token');
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+        // Check authentication
+        if (!token) {
+            window.location.href = '/login.html';
+        }
+
+        // Display user email
+        document.getElementById('user-email').textContent = user.email || '';
+
+        // Load configurations
+        async function loadConfig() {
+            try {
+                const response = await fetch('/api/user/config', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                if (!response.ok) throw new Error('Failed to load config');
+
+                const data = await response.json();
+
+                // Update status badges
+                if (data.telegram_configured) {
+                    document.getElementById('telegram-status').textContent = 'Configured';
+                    document.getElementById('telegram-status').classList.remove('status-not-configured');
+                    document.getElementById('telegram-status').classList.add('status-configured');
+                }
+
+                if (data.binance_configured) {
+                    document.getElementById('binance-status').textContent = 'Configured';
+                    document.getElementById('binance-status').classList.remove('status-not-configured');
+                    document.getElementById('binance-status').classList.add('status-configured');
+                }
+
+                // Load trading preferences
+                if (data.trading_mode) document.getElementById('trading-mode').value = data.trading_mode;
+                if (data.default_leverage) document.getElementById('default-leverage').value = data.default_leverage;
+                if (data.max_position_size_usdt) document.getElementById('max-position-size').value = data.max_position_size_usdt;
+                document.getElementById('binance-testnet').value = data.binance_testnet ? 'true' : 'false';
+
+            } catch (error) {
+                console.error('Failed to load config:', error);
+            }
+        }
+
+        // Telegram form submission
+        document.getElementById('telegram-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const messageEl = document.getElementById('telegram-message');
+            messageEl.classList.add('hidden');
+
+            try {
+                const response = await fetch('/api/user/config/telegram', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        telegram_bot_token: document.getElementById('telegram-token').value,
+                        telegram_channel_id: document.getElementById('telegram-channel').value
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) throw new Error(data.error);
+
+                messageEl.textContent = 'Telegram configuration saved successfully!';
+                messageEl.classList.remove('error', 'hidden');
+                messageEl.classList.add('success');
+
+                await loadConfig();
+            } catch (error) {
+                messageEl.textContent = error.message;
+                messageEl.classList.remove('success', 'hidden');
+                messageEl.classList.add('error');
+            }
+        });
+
+        // Binance form submission
+        document.getElementById('binance-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const messageEl = document.getElementById('binance-message');
+            messageEl.classList.add('hidden');
+
+            try {
+                const response = await fetch('/api/user/config/binance', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        binance_api_key: document.getElementById('binance-api-key').value,
+                        binance_api_secret: document.getElementById('binance-api-secret').value,
+                        binance_testnet: document.getElementById('binance-testnet').value === 'true'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) throw new Error(data.error);
+
+                messageEl.textContent = 'Binance configuration saved successfully!';
+                messageEl.classList.remove('error', 'hidden');
+                messageEl.classList.add('success');
+
+                // Clear API secret field for security
+                document.getElementById('binance-api-secret').value = '';
+
+                await loadConfig();
+            } catch (error) {
+                messageEl.textContent = error.message;
+                messageEl.classList.remove('success', 'hidden');
+                messageEl.classList.add('error');
+            }
+        });
+
+        // Trading preferences form submission
+        document.getElementById('trading-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const messageEl = document.getElementById('trading-message');
+            messageEl.classList.add('hidden');
+
+            try {
+                const response = await fetch('/api/user/config/trading', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        trading_mode: document.getElementById('trading-mode').value,
+                        default_leverage: parseInt(document.getElementById('default-leverage').value),
+                        max_position_size_usdt: parseFloat(document.getElementById('max-position-size').value)
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) throw new Error(data.error);
+
+                messageEl.textContent = 'Trading preferences saved successfully!';
+                messageEl.classList.remove('error', 'hidden');
+                messageEl.classList.add('success');
+            } catch (error) {
+                messageEl.textContent = error.message;
+                messageEl.classList.remove('success', 'hidden');
+                messageEl.classList.add('error');
+            }
+        });
+
+        // Logout function
+        function logout() {
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('user');
+            window.location.href = '/login.html';
+        }
+
+        // Load config on page load
+        loadConfig();
+    </script>
+</body>
+</html>
