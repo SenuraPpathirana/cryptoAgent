@@ -131,6 +131,42 @@ export class LLMService {
     }
   }
 
+  async generateSuggestionMessage(
+    suggestion: string,
+    context?: { tradingMode?: string; conversationHistory?: Array<{ role: 'user' | 'assistant', message: string }> }
+  ): Promise<string | null> {
+    if (this.provider === 'none') {
+      return null;
+    }
+
+    const systemPrompt =
+      'You are a crypto trading assistant. Rewrite the suggestion as a short, friendly question (max 1 sentence, <= 120 chars). ' +
+      'Keep it actionable and natural. Do not use quotes.';
+    const userPromptParts = [`Suggestion: ${suggestion}`];
+
+    if (context?.conversationHistory && context.conversationHistory.length > 0) {
+      const recent = context.conversationHistory.slice(-4);
+      const lines = recent.map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.message}`);
+      userPromptParts.push(`Recent context:\n${lines.join('\n')}`);
+    }
+
+    if (context?.tradingMode) {
+      userPromptParts.push(`Trading mode: ${context.tradingMode}`);
+    }
+
+    const userPrompt = userPromptParts.join('\n');
+
+    try {
+      const text = await this.callTextModel(systemPrompt, userPrompt);
+      const cleaned = text.replace(/\s+/g, ' ').trim();
+      return cleaned.length > 0 ? cleaned : null;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.warn('Failed to generate suggestion message via LLM', { error: errorMessage });
+      return null;
+    }
+  }
+
   private buildSystemPrompt(): string {
     return `You are a crypto trading assistant. Your job is to understand user messages and extract trading intent.
 
@@ -667,5 +703,38 @@ Output: {"intent":{"action":"OPEN_POSITION","symbol":"ETHUSDT","side":"SHORT"},"
       return `${this.provider} (fallback: ${this.fallbackProvider})`;
     }
     return this.provider;
+  }
+
+  private async callTextModel(systemPrompt: string, userPrompt: string): Promise<string> {
+    let response: string;
+    const now = Date.now();
+
+    if (this.provider === 'github' && this.fallbackProvider === 'groq' && now < this.rateLimitUntil) {
+      response = await this.callGroq(systemPrompt, userPrompt);
+    } else if (this.provider === 'pollinations') {
+      response = await this.callPollinations(systemPrompt, userPrompt);
+    } else if (this.provider === 'gemini') {
+      response = await this.callGemini(systemPrompt, userPrompt);
+    } else if (this.provider === 'github') {
+      try {
+        response = await this.callGitHub(systemPrompt, userPrompt);
+        if (this.fallbackProvider) {
+          this.fallbackProvider = null;
+          this.rateLimitUntil = 0;
+        }
+      } catch (error) {
+        if (error instanceof Error && error.message.includes('rate limit') && this.groqApiKey) {
+          this.fallbackProvider = 'groq';
+          this.rateLimitUntil = now + (20 * 60 * 60 * 1000);
+          response = await this.callGroq(systemPrompt, userPrompt);
+        } else {
+          throw error;
+        }
+      }
+    } else {
+      response = await this.callGroq(systemPrompt, userPrompt);
+    }
+
+    return response;
   }
 }

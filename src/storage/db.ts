@@ -48,10 +48,25 @@ class Database {
         // PostgreSQL connection
         this.dbType = 'postgres';
         logger.info(`Connecting to PostgreSQL database: ${dbUrl.replace(/:[^:@]*@/, ':***@')}`);
-        
-        this.pool = new Pool({
-          connectionString: dbUrl,
-        });
+
+        let ssl: { rejectUnauthorized: boolean } | undefined;
+        try {
+          const url = new URL(dbUrl);
+          const sslmode = url.searchParams.get('sslmode');
+          const isLocalhost =
+            url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1';
+          const forceSsl = (process.env.PG_SSL || '').toLowerCase() === 'true';
+          const shouldUseSsl =
+            forceSsl || sslmode === 'require' || url.hostname.endsWith('supabase.co') || (!isLocalhost && env.NODE_ENV === 'production');
+
+          if (shouldUseSsl) {
+            ssl = { rejectUnauthorized: false };
+          }
+        } catch {
+          // Ignore URL parse issues and fall back to default Pool behavior
+        }
+
+        this.pool = new Pool({ connectionString: dbUrl, ssl });
         
         // Test connection
         await this.pool.query('SELECT NOW()');
@@ -92,7 +107,10 @@ class Database {
     }
 
     if (this.dbType === 'postgres' && this.pool) {
-      return this.pool.query(text, params);
+      // Allow the codebase to keep using SQLite-style queries when running on Postgres
+      // (e.g. `?` placeholders and `datetime('now')`).
+      const adaptedText = this.adaptSqlForPostgres(text, params);
+      return this.pool.query(adaptedText, params);
     } else if (this.dbType === 'sqlite' && this.sqlite) {
       // For multi-statement SQL (like migrations), execute them separately
       if (text.includes(';') && !params) {
@@ -105,8 +123,9 @@ class Database {
           try {
             this.sqlite.prepare(stmt).run();
           } catch (error: any) {
-            // Skip "already exists" errors during migration
-            if (!error.message?.includes('already exists')) {
+            // Skip "already exists" or duplicate column errors during migration
+            const msg = error.message || '';
+            if (!msg.includes('already exists') && !msg.includes('duplicate column')) {
               throw error;
             }
           }
@@ -140,6 +159,58 @@ class Database {
     }
 
     throw new Error('No database connection available');
+  }
+
+  private adaptSqlForPostgres(text: string, params?: any[]): string {
+    let adapted = text;
+
+    // Replace common SQLite datetime function used in repositories
+    adapted = adapted.replace(/datetime\(\s*'now'\s*\)/gi, '(now()::text)');
+    adapted = adapted.replace(/datetime\(\s*"now"\s*\)/gi, '(now()::text)');
+
+    if (!params || params.length === 0) {
+      return adapted;
+    }
+
+    // Replace SQLite-style `?` placeholders with Postgres `$1`, `$2`, ...
+    // Avoid touching `?` inside quoted strings/identifiers.
+    let result = '';
+    let paramIndex = 0;
+    let inSingleQuote = false;
+    let inDoubleQuote = false;
+
+    for (let i = 0; i < adapted.length; i++) {
+      const ch = adapted[i];
+      const next = adapted[i + 1];
+
+      if (!inDoubleQuote && ch === "'") {
+        // Handle escaped single quote '' inside strings
+        if (inSingleQuote && next === "'") {
+          result += "''";
+          i++;
+          continue;
+        }
+        inSingleQuote = !inSingleQuote;
+        result += ch;
+        continue;
+      }
+
+      if (!inSingleQuote && ch === '"') {
+        inDoubleQuote = !inDoubleQuote;
+        result += ch;
+        continue;
+      }
+
+      if (!inSingleQuote && !inDoubleQuote && ch === '?') {
+        paramIndex++;
+        result += `$${paramIndex}`;
+        continue;
+      }
+
+      result += ch;
+    }
+
+    return result;
   }
 }
 

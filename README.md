@@ -56,6 +56,30 @@ npm run migrate
 npm run dev
 ```
 
+### Supabase (Free Hosted PostgreSQL)
+
+1) Create a Supabase project and copy the database connection string from **Project Settings → Database → Connection string**.
+2) Set `DATABASE_URL` to the Supabase URL (add `?sslmode=require` if not already present).
+3) Create tables on Supabase:
+
+```bash
+npm run migrate
+```
+
+4) Copy your existing data into Supabase (works from either SQLite or Postgres as the source):
+
+```bash
+# SOURCE_DATABASE_URL can be your local Postgres URL or sqlite:./data/crypto_agent.db
+SOURCE_DATABASE_URL="..." TARGET_DATABASE_URL="..." npm run transfer
+```
+
+PowerShell:
+```powershell
+$env:SOURCE_DATABASE_URL="..."
+$env:TARGET_DATABASE_URL="..."
+npm run transfer
+```
+
 ### Environment Variables
 
 See [.env.example](.env.example) for all required configuration.

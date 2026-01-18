@@ -26,10 +26,12 @@ export interface UserConfig {
 
 export interface UserBehavior {
   user_id: number;
-  keyword: string;
-  category: string;
-  occurrence_count: number;
-  last_occurred: Date;
+  keyword?: string;
+  category?: string;
+  occurrence_count?: number;
+  action?: string;
+  action_count?: number;
+  last_occurred?: Date;
 }
 
 export class UsersRepository {
@@ -235,15 +237,48 @@ export class UsersRepository {
   }
 
   /**
+   * Track user intent actions (LIST_GOALS, CHECK_PRICE, CREATE_GOAL, etc.)
+   */
+  async trackAction(userId: number, action: string): Promise<void> {
+    try {
+      const existing = await db.query(
+        'SELECT action_count FROM user_behavior WHERE user_id = ? AND action = ?',
+        [userId, action]
+      );
+
+      if (existing.rows && existing.rows.length > 0) {
+        await db.query(
+          `UPDATE user_behavior
+           SET action_count = action_count + 1,
+               occurrence_count = occurrence_count + 1,
+               last_occurred = datetime('now'),
+               keyword = ?,
+               category = 'action'
+           WHERE user_id = ? AND action = ?`,
+          [action, userId, action]
+        );
+      } else {
+        await db.query(
+          `INSERT INTO user_behavior (user_id, keyword, category, occurrence_count, action, action_count, last_occurred)
+           VALUES (?, ?, 'action', 1, ?, 1, datetime('now'))`,
+          [userId, action, action]
+        );
+      }
+    } catch (error) {
+      logger.error('Failed to track action', { error, userId, action });
+    }
+  }
+
+  /**
    * Get user behavior patterns
    */
   async getUserBehavior(userId: number, limit: number = 50): Promise<UserBehavior[]> {
     try {
       const result = await db.query(
-        `SELECT user_id, keyword, category, occurrence_count, last_occurred
+        `SELECT user_id, keyword, category, occurrence_count, action, action_count, last_occurred
          FROM user_behavior
          WHERE user_id = ?
-         ORDER BY occurrence_count DESC, last_occurred DESC
+         ORDER BY occurrence_count DESC, action_count DESC, last_occurred DESC
          LIMIT ?`,
         [userId, limit]
       );
@@ -307,10 +342,26 @@ export class UsersRepository {
 
       // Analyze patterns
       const features = behavior.reduce((acc, b) => {
-        acc[b.category] = acc[b.category] || [];
-        acc[b.category].push(b.keyword);
+        if (b.category && b.keyword) {
+          acc[b.category] = acc[b.category] || [];
+          acc[b.category].push(b.keyword);
+        }
         return acc;
       }, {} as Record<string, string[]>);
+
+      const actionCounts = behavior.reduce((acc, b) => {
+        if (b.action) {
+          acc[b.action] = (acc[b.action] || 0) + (b.action_count || 0);
+        }
+        return acc;
+      }, {} as Record<string, number>);
+
+      const keywordCounts = behavior.reduce((acc, b) => {
+        if (b.category === 'keyword' && b.keyword) {
+          acc[b.keyword] = (acc[b.keyword] || 0) + (b.occurrence_count || 0);
+        }
+        return acc;
+      }, {} as Record<string, number>);
 
       // Suggest based on patterns
       if (features['feature']?.includes('telegram') && features['feature']?.includes('reminder')) {
@@ -325,7 +376,44 @@ export class UsersRepository {
         suggestions.push('Enable Telegram notifications for position updates?');
       }
 
-      return suggestions;
+      if ((actionCounts['CHECK_PRICE'] || 0) >= 3) {
+        suggestions.push('You check prices often. Want me to create a price alert goal for you?');
+      }
+
+      if ((actionCounts['LIST_GOALS'] || 0) >= 3) {
+        suggestions.push('Need help cleaning up or editing your goals?');
+      }
+
+      if ((actionCounts['CREATE_GOAL'] || 0) >= 3) {
+        suggestions.push('Want Telegram notifications for all new goals?');
+      }
+
+      if ((keywordCounts['price'] || 0) >= 3) {
+        suggestions.push('Want me to check the current price now?');
+      }
+
+      if ((keywordCounts['goals'] || 0) >= 3 || (keywordCounts['goal'] || 0) >= 3) {
+        suggestions.push('Do you want to view your active goals?');
+      }
+
+      if ((keywordCounts['support'] || 0) >= 2 || (keywordCounts['resistance'] || 0) >= 2) {
+        suggestions.push('Want me to analyze support and resistance levels?');
+      }
+
+      if ((keywordCounts['rsi'] || 0) >= 2) {
+        suggestions.push('Want an RSI check on your symbol?');
+      }
+
+      if ((keywordCounts['macd'] || 0) >= 2) {
+        suggestions.push('Want a MACD momentum check?');
+      }
+
+      if ((keywordCounts['divergence'] || 0) >= 2) {
+        suggestions.push('Should I look for divergence signals?');
+      }
+
+      // Deduplicate while preserving order
+      return Array.from(new Set(suggestions));
     } catch (error) {
       logger.error('Failed to get smart suggestions', { error, userId });
       return [];
