@@ -16,7 +16,7 @@ interface HealthResponse {
   };
 }
 
-healthRouter.get('/', async (req: Request, res: Response) => {
+healthRouter.get('/', async (_req: Request, res: Response) => {
   try {
     const health: HealthResponse = {
       status: 'healthy',

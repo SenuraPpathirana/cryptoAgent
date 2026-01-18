@@ -35,7 +35,8 @@ export class LLMService {
   private apiKey: string;
   private model: string;
   private groqApiKey: string;
-  private groqModel: string = 'llama-3.1-8b-instant';
+  // @ts-ignore - _groqModel reserved for future use
+  private _groqModel: string = 'llama-3.1-8b-instant';
 
   constructor() {
     // Store Groq API key for fallback
@@ -386,7 +387,7 @@ Output: {"intent":{"action":"OPEN_POSITION","symbol":"ETHUSDT","side":"SHORT"},"
           
           // Handle quota exceeded errors
           if (response.status === 429) {
-            const errorMsg = errorData.error?.message || 'Rate limit exceeded';
+            const errorMsg = (errorData as any).error?.message || 'Rate limit exceeded';
             throw new Error(`Gemini API rate limit: ${errorMsg}`);
           }
           
@@ -395,7 +396,7 @@ Output: {"intent":{"action":"OPEN_POSITION","symbol":"ETHUSDT","side":"SHORT"},"
         }
 
         const data = await response.json();
-        const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        const text = (data as any).candidates?.[0]?.content?.parts?.[0]?.text;
         
         if (!text) {
           throw new Error(`No response from Gemini. Response: ${JSON.stringify(data)}`);
@@ -464,7 +465,7 @@ Output: {"intent":{"action":"OPEN_POSITION","symbol":"ETHUSDT","side":"SHORT"},"
           
           // Handle rate limit errors
           if (response.status === 429) {
-            const errorMsg = errorData.error?.message || 'Rate limit exceeded';
+            const errorMsg = (errorData as any).error?.message || 'Rate limit exceeded';
             throw new Error(`Pollinations API rate limit: ${errorMsg}`);
           }
           
@@ -472,7 +473,7 @@ Output: {"intent":{"action":"OPEN_POSITION","symbol":"ETHUSDT","side":"SHORT"},"
         }
 
         const data = await response.json();
-        const text = data.choices?.[0]?.message?.content;
+        const text = (data as any).choices?.[0]?.message?.content;
         
         if (!text) {
           throw new Error(`No response from Pollinations. Response: ${JSON.stringify(data)}`);
@@ -533,7 +534,7 @@ Output: {"intent":{"action":"OPEN_POSITION","symbol":"ETHUSDT","side":"SHORT"},"
           
           // Handle quota exceeded errors
           if (response.status === 429) {
-            const errorMsg = errorData.error?.message || 'Rate limit exceeded';
+            const errorMsg = (errorData as any).error?.message || 'Rate limit exceeded';
             throw new Error(`Groq API rate limit: ${errorMsg}`);
           }
           
@@ -542,7 +543,7 @@ Output: {"intent":{"action":"OPEN_POSITION","symbol":"ETHUSDT","side":"SHORT"},"
         }
 
         const data = await response.json();
-        const text = data.choices?.[0]?.message?.content;
+        const text = (data as any).choices?.[0]?.message?.content;
         
         if (!text) {
           throw new Error(`No response from Groq. Response: ${JSON.stringify(data)}`);
@@ -617,7 +618,7 @@ Output: {"intent":{"action":"OPEN_POSITION","symbol":"ETHUSDT","side":"SHORT"},"
           
           // Handle rate limit errors
           if (response.status === 429) {
-            const errorMsg = errorData.error?.message || 'Rate limit exceeded';
+            const errorMsg = (errorData as any).error?.message || 'Rate limit exceeded';
             throw new Error(`GitHub Models API rate limit: ${errorMsg}`);
           }
           
@@ -625,7 +626,7 @@ Output: {"intent":{"action":"OPEN_POSITION","symbol":"ETHUSDT","side":"SHORT"},"
         }
 
         const data = await response.json();
-        const text = data.choices?.[0]?.message?.content;
+        const text = (data as any).choices?.[0]?.message?.content;
         
         if (!text) {
           throw new Error(`No response from GitHub Models. Response: ${JSON.stringify(data)}`);

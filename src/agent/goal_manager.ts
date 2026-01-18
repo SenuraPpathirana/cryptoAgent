@@ -40,6 +40,7 @@ export class GoalManager {
   public async createGoal(dto: CreateGoalDto): Promise<Goal> {
     const goal: Goal = {
       id: uuidv4(),
+      userId: (dto as any).userId || 0,
       symbol: dto.symbol.toUpperCase(),
       condition: dto.condition,
       targetPrice: dto.targetPrice,

@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { createModuleLogger } from '../../config/logger';
-import { Goal, CreateGoalDto, UpdateGoalDto } from '../../types/goal.types';
+import { CreateGoalDto, UpdateGoalDto } from '../../types/goal.types';
 import { GoalManager } from '../../agent/goal_manager';
 
 const logger = createModuleLogger('GoalsController');

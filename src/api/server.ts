@@ -2,7 +2,6 @@ import express, { Application } from 'express';
 import { createServer as createHTTPServer, Server } from 'http';
 import { WebSocketServer } from 'ws';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { env } from '../config/env';
 import { createModuleLogger } from '../config/logger';
 import { healthRouter } from './routes/health.routes';
@@ -15,8 +14,6 @@ import { errorMiddleware } from './middleware/error.middleware';
 import { authMiddleware } from './middleware/auth.middleware';
 
 const logger = createModuleLogger('API');
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 export class APIServer {
   private app: Application;
@@ -46,13 +43,14 @@ export class APIServer {
       res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
       res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
       if (req.method === 'OPTIONS') {
-        return res.sendStatus(200);
+        res.sendStatus(200);
+        return;
       }
       next();
     });
 
     // Request logging
-    this.app.use((req, res, next) => {
+    this.app.use((req, _res, next) => {
       logger.debug(`${req.method} ${req.path}`, {
         body: req.body,
         query: req.query,
@@ -63,7 +61,7 @@ export class APIServer {
 
   private setupRoutes(): void {
     // Serve static files (chat UI)
-    const publicPath = path.join(__dirname, '../../public');
+    const publicPath = path.join(process.cwd(), 'public');
     this.app.use(express.static(publicPath));
 
     // Public routes

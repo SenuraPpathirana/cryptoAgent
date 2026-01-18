@@ -65,7 +65,7 @@ export class TelegramCommandHandler {
       const res = await fetch(url);
       if (!res.ok) return [];
       
-      const data = await res.json();
+      const data = await res.json() as any;
       return data.result || [];
     } catch (e) {
       return [];
@@ -158,18 +158,17 @@ Use /help to see all commands.`;
     }
 
     try {
-      const goal = this.goals.create({
+      const goal = await this.goals.createGoal({
         symbol: symbol.toUpperCase(),
         condition: condition.toUpperCase() as any,
-        target,
-        priceSource: 'MARK',
-        notifyOnce: true,
-        cooldownSeconds: 60
+        targetPrice: target,
+        watchMode: 'ONCE',
+        notifyChannel: true
       });
 
       const msg = `✅ *Goal Created*
 
-${Tpl.watchStarted(goal)}
+${Tpl.formatWatchStarted(goal)}
 
 I'll notify when the condition is met!`;
 
@@ -181,7 +180,7 @@ I'll notify when the condition is met!`;
   }
 
   private async handleList(chatId: number) {
-    const goals = this.goals.list().filter(g => g.isActive);
+    const goals = (await this.goals.listGoals()).filter(g => g.state === 'WATCHING' || g.state === 'TRIGGERED');
 
     if (goals.length === 0) {
       await this.sendMessage(chatId, '📭 No active goals');
@@ -191,9 +190,9 @@ I'll notify when the condition is met!`;
     let msg = `📋 *Active Goals* (${goals.length})\n\n`;
 
     for (const g of goals) {
-      msg += `• *${g.symbol}* ${g.condition} ${Tpl.fmt(g.target)}\n`;
+      msg += `• *${g.symbol}* ${g.condition} ${g.targetPrice.toFixed(2)}\n`;
       msg += `  ID: \`${g.id}\`\n`;
-      msg += `  Source: ${g.priceSource}\n\n`;
+      msg += `  State: ${g.state}\n\n`;
     }
 
     await this.sendMessage(chatId, msg);
@@ -206,15 +205,15 @@ I'll notify when the condition is met!`;
     }
 
     const goalId = args[0];
-    const goal = this.goals.get(goalId);
+    const goal = await this.goals.getGoal(goalId);
 
     if (!goal) {
       await this.sendMessage(chatId, `❌ Goal not found: \`${goalId}\``);
       return;
     }
 
-    this.goals.remove(goalId);
-    await this.sendMessage(chatId, `✅ ${Tpl.watchStopped(goal)}`);
+    await this.goals.deleteGoal(goalId);
+    await this.sendMessage(chatId, `✅ ${Tpl.formatWatchStopped(goal)}`);
   }
 
   private async handlePrice(chatId: number, args: string[]) {
@@ -224,19 +223,19 @@ I'll notify when the condition is met!`;
     }
 
     const symbol = args[0].toUpperCase();
-    const price = this.prices.getBestPrice(symbol);
+    const priceData = this.prices.getPrice(symbol);
 
-    if (price === undefined) {
+    if (!priceData) {
       await this.sendMessage(chatId, `❌ No price data for ${symbol}`);
       return;
     }
 
-    const priceData = this.prices.get(symbol);
     let msg = `💰 *${symbol}*\n\n`;
-    msg += `Current: ${Tpl.fmt(price)}\n`;
-    if (priceData?.bid) msg += `Bid: ${Tpl.fmt(priceData.bid)}\n`;
-    if (priceData?.ask) msg += `Ask: ${Tpl.fmt(priceData.ask)}\n`;
-    if (priceData?.mark) msg += `Mark: ${Tpl.fmt(priceData.mark)}\n`;
+    const price = priceData.last || priceData.mark || priceData.bid || 0;
+    msg += `Current: ${price.toFixed(2)}\n`;
+    if (priceData.bid) msg += `Bid: ${priceData.bid.toFixed(2)}\n`;
+    if (priceData.ask) msg += `Ask: ${priceData.ask.toFixed(2)}\n`;
+    if (priceData.mark) msg += `Mark: ${priceData.mark.toFixed(2)}\n`;
 
     await this.sendMessage(chatId, msg);
   }

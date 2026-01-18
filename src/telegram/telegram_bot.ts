@@ -67,7 +67,7 @@ export class TelegramBotClient {
     attempt: number = 1
   ): Promise<TelegramBot.Message | null> {
     try {
-      const message = await this.bot.sendMessage(chatId, text, {
+      const message = await this.bot!.sendMessage(chatId, text, {
         parse_mode: 'Markdown',
         ...options,
       });
@@ -144,7 +144,7 @@ export class TelegramBotClient {
     options?: TelegramBot.SendPhotoOptions
   ): Promise<TelegramBot.Message | null> {
     try {
-      const message = await this.bot.sendPhoto(chatId, photo, options);
+      const message = await this.bot!.sendPhoto(chatId, photo, options);
       logger.info(`Photo sent to ${chatId}`);
       return message;
     } catch (error) {
@@ -160,7 +160,7 @@ export class TelegramBotClient {
     options?: TelegramBot.EditMessageTextOptions
   ): Promise<boolean> {
     try {
-      await this.bot.editMessageText(text, {
+      await this.bot!.editMessageText(text, {
         chat_id: chatId,
         message_id: messageId,
         parse_mode: 'Markdown',
@@ -176,7 +176,7 @@ export class TelegramBotClient {
 
   public async deleteMessage(chatId: string | number, messageId: number): Promise<boolean> {
     try {
-      await this.bot.deleteMessage(chatId, messageId);
+      await this.bot!.deleteMessage(chatId, messageId);
       logger.info(`Message ${messageId} deleted`);
       return true;
     } catch (error) {
@@ -186,7 +186,7 @@ export class TelegramBotClient {
   }
 
   public getBot(): TelegramBot {
-    return this.bot;
+    return this.bot!;
   }
 
   public isConnected(): boolean {

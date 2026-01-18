@@ -19,11 +19,12 @@ export interface TradeResult {
 export class TradeExecutor {
   private static instance: TradeExecutor;
   private isPaper: boolean;
-  private binance: BinanceFuturesREST;
+  // @ts-ignore - __binance may be used in future updates
+  private __binance: BinanceFuturesREST;
 
   private constructor() {
     this.isPaper = env.TRADING_MODE === 'paper';
-    this.binance = BinanceFuturesREST.getInstance();
+    this.__binance = BinanceFuturesREST.getInstance();
     const mode = env.TRADING_MODE === 'paper' ? 'PAPER (memory only)' : 
                  env.TRADING_MODE === 'testnet' ? 'TESTNET (Binance mock)' : 'LIVE (real money)';
     logger.info(`Trade executor initialized in ${mode} mode`);

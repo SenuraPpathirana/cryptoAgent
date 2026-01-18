@@ -38,7 +38,7 @@ export class BinanceDataFetcher {
         throw new Error(`Binance API error: ${response.status} ${response.statusText}`);
       }
 
-      const data = await response.json();
+      const data = await response.json() as any[];
 
       // Transform Binance kline format to CandleData
       const candles: CandleData[] = data.map((kline: any[]) => ({

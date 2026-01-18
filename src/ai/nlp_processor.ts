@@ -215,7 +215,8 @@ export class NLPProcessor {
     const symbol = this.extractSymbol(message);
     const target = this.extractPrice(message);
     const condition = this.extractCondition(message);
-    const notifyOnce = this.extractNotifyOnce(message);
+    // @ts-ignore - _notifyOnce reserved for future use
+    const _notifyOnce = this.extractNotifyOnce(message);
     const autoTrade = this.extractAutoTrade(message);
 
     // Calculate confidence
@@ -280,7 +281,7 @@ export class NLPProcessor {
     return undefined;
   }
 
-  private extractCondition(message: string): 'GTE' | 'LTE' | 'CROSS_ABOVE' | 'CROSS_BELOW' | undefined {
+  private extractCondition(message: string): 'ABOVE' | 'BELOW' | 'CROSSES_ABOVE' | 'CROSSES_BELOW' | undefined {
     // Check multi-word conditions firstABOVE' | 'BELOW' | 'CROSSES_ABOVE' | 'CROSSE
     for (const [phrase, condition] of Object.entries(this.conditionMap)) {
       if (message.includes(phrase)) {

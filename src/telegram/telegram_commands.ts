@@ -152,7 +152,7 @@ I'll notify you when the condition is met!
 
   private async handleList(chatId: number): Promise<void> {
     try {
-      const goals = this.goalManager.getActiveGoals();
+      const goals = await this.goalManager.getActiveGoals();
 
       if (goals.length === 0) {
         await this.bot.sendMessage(chatId, '📭 No active watches');

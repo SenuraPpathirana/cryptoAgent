@@ -42,9 +42,9 @@ export class BinanceFuturesREST {
   public async getServerTime(): Promise<number> {
     try {
       const response = await this.client.get('/fapi/v1/time');
-      return response.data.serverTime;
+      return (response.data as any).serverTime;
     } catch (error) {
-      logger.warn('Failed to get server time, using local time', error);
+      logger.warn('Failed to get server time, using local time', error as any);
       return Date.now();
     }
   }

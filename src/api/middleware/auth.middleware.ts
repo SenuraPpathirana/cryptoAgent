@@ -102,7 +102,8 @@ export async function jwtAuthMiddleware(
  */
 export async function optionalJwtAuthMiddleware(
   req: Request,
-  res: Response,
+  // @ts-ignore - res may be unused in this middleware
+  _res: Response,
   next: NextFunction
 ): Promise<void> {
   try {

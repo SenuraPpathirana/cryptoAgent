@@ -370,7 +370,8 @@ chatRouter.post('/', async (req: Request, res: Response) => {
         // Import required modules
         const { TradeExecutor } = await import('../../trading/trade_executor');
         const { TelegramBotClient } = await import('../../telegram/telegram_bot');
-        const telegramBot = TelegramBotClient.getInstance();
+        // @ts-ignore - __telegramBot may be used in future updates
+        const __telegramBot = TelegramBotClient.getInstance();
         const tradeExecutor = TradeExecutor.getInstance();
 
         // Get current market data for validation

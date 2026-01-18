@@ -16,14 +16,15 @@ class CryptoTelegramAgent {
   private apiServer: APIServer;
   private binanceWS: BinanceWebSocket;
   private goalEvaluator: GoalEvaluator;
-  private telegramBot: TelegramBotClient;
+  // @ts-ignore - __telegramBot may be used in future updates
+  private __telegramBot: TelegramBotClient;
   private channelPublisher: ChannelPublisher;
 
   constructor() {
     this.apiServer = new APIServer();
     this.binanceWS = BinanceWebSocket.getInstance();
     this.goalEvaluator = GoalEvaluator.getInstance();
-    this.telegramBot = TelegramBotClient.getInstance();
+    this.__telegramBot = TelegramBotClient.getInstance();
     this.channelPublisher = ChannelPublisher.getInstance();
   }
 
@@ -41,7 +42,7 @@ class CryptoTelegramAgent {
       await this.apiServer.start();
 
       // 3. Connect to Binance WebSocket
-      const streams = getMultiSymbolStreams(SUPPORTED_SYMBOLS);
+      const streams = getMultiSymbolStreams([...SUPPORTED_SYMBOLS]);
       this.binanceWS.connect(streams);
 
       // 4. Start goal evaluator
@@ -74,7 +75,7 @@ class CryptoTelegramAgent {
         this.binanceWS.disconnect();
 
         // Disconnect database
-        await this.database.disconnect();
+        await db.disconnect();
 
         // Send shutdown notification
         await this.channelPublisher.publishCustomMessage(

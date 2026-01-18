@@ -1,9 +1,9 @@
-import { RSIResult } from '../indicators/rsi';
-import { MACDResult } from '../indicators/macd';
-import { MAResult } from '../indicators/moving_averages';
-import { BollingerBandsResult } from '../indicators/bollinger_bands';
-import { TrendResult } from '../patterns/trend_detector';
-import { SupportResistanceResult } from '../patterns/support_resistance';
+import { RSIResult } from './indicators/rsi';
+import { MACDResult } from './indicators/macd';
+import { MAResult } from './indicators/moving_averages';
+import { BollingerBandsResult } from './indicators/bollinger_bands';
+import { TrendResult } from './patterns/trend_detector';
+import { SupportResistanceResult } from './patterns/support_resistance';
 
 export interface TradingSignal {
   action: 'STRONG_BUY' | 'BUY' | 'HOLD' | 'SELL' | 'STRONG_SELL';

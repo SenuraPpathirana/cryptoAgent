@@ -57,29 +57,36 @@ export class MACDIndicator {
       let crossover: 'BULLISH' | 'BEARISH' | null = null;
       
       // Bullish crossover: MACD crosses above signal line
-      if (previous.MACD <= previous.signal && current.MACD > current.signal) {
-        crossover = 'BULLISH';
-      }
-      // Bearish crossover: MACD crosses below signal line
-      else if (previous.MACD >= previous.signal && current.MACD < current.signal) {
-        crossover = 'BEARISH';
+      if (previous.MACD !== undefined && previous.signal !== undefined && current.MACD !== undefined && current.signal !== undefined) {
+        if (previous.MACD <= previous.signal && current.MACD > current.signal) {
+          crossover = 'BULLISH';
+        }
+        // Bearish crossover: MACD crosses below signal line
+        else if (previous.MACD >= previous.signal && current.MACD < current.signal) {
+          crossover = 'BEARISH';
+        }
       }
 
       // Determine trend based on MACD position relative to signal and zero line
       let trend: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
       
-      if (current.MACD > current.signal && current.MACD > 0) {
-        trend = 'BULLISH';
-      } else if (current.MACD < current.signal && current.MACD < 0) {
-        trend = 'BEARISH';
+      // Trend analysis
+      if (current.MACD !== undefined && current.signal !== undefined) {
+        if (current.MACD > current.signal && current.MACD > 0) {
+          trend = 'BULLISH';
+        } else if (current.MACD < current.signal && current.MACD < 0) {
+          trend = 'BEARISH';
+        } else {
+          trend = 'NEUTRAL';
+        }
       } else {
         trend = 'NEUTRAL';
       }
 
       return {
-        macd: Math.round(current.MACD * 100) / 100,
-        signal: Math.round(current.signal * 100) / 100,
-        histogram: Math.round(current.histogram * 100) / 100,
+        macd: current.MACD !== undefined ? Math.round(current.MACD * 100) / 100 : 0,
+        signal: current.signal !== undefined ? Math.round(current.signal * 100) / 100 : 0,
+        histogram: current.histogram !== undefined ? Math.round(current.histogram * 100) / 100 : 0,
         crossover,
         trend
       };

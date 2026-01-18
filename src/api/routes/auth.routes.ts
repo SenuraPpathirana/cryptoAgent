@@ -34,6 +34,11 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
     // Register user
     const result = await authService.register(email, password, username);
 
+    if (!result) {
+      res.status(500).json({ error: 'Registration failed' });
+      return;
+    }
+
     logger.info('User registered', { userId: result.user.id, email });
 
     res.status(201).json({

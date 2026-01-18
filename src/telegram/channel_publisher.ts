@@ -3,7 +3,7 @@ import { env } from '../config/env';
 import { TelegramBotClient } from './telegram_bot';
 import { formatGoalAlert, formatTradeOpened, formatTradeClosed, formatSystemMessage } from './templates';
 import { Goal } from '../types/goal.types';
-import { TradeEvent, AlertEvent, SystemEvent } from '../types/events.types';
+import { TradeEvent, SystemEvent } from '../types/events.types';
 
 const logger = createModuleLogger('ChannelPublisher');
 
@@ -14,7 +14,7 @@ export class ChannelPublisher {
 
   private constructor() {
     this.bot = TelegramBotClient.getInstance();
-    this.channelId = env.TELEGRAM_CHANNEL_ID;
+    this.channelId = env.TELEGRAM_CHANNEL_ID || '';
   }
 
   public static getInstance(): ChannelPublisher {
