@@ -12,7 +12,6 @@ export class GoalManager {
 
   private constructor() {
     this.goalsRepo = GoalsRepository.getInstance();
-    this.logActiveGoals();
   }
 
   public static getInstance(): GoalManager {
@@ -32,6 +31,10 @@ export class GoalManager {
     } catch (error) {
       logger.error('Failed to load goals', error);
     }
+  }
+
+  public async init(): Promise<void> {
+    await this.logActiveGoals();
   }
 
   public async createGoal(dto: CreateGoalDto): Promise<Goal> {

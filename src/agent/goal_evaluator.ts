@@ -172,6 +172,9 @@ export class GoalEvaluator {
         }
       }
 
+      // Remove goal after trigger (user request: triggered goals should disappear)
+      await this.goalManager.deleteGoal(goal.id);
+
       return {
         goalId: goal.id,
         triggered: true,
@@ -269,6 +272,9 @@ export class GoalEvaluator {
             logger.error(`Failed to send divergence notification for goal ${goal.id}`, { error });
           }
         }
+
+        // Remove goal after trigger (user request: triggered goals should disappear)
+        await this.goalManager.deleteGoal(goal.id);
 
         return {
           goalId: goal.id,

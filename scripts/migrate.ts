@@ -16,12 +16,26 @@ async function migrate() {
     // Connect to database first
     await db.connect();
 
-    // Read SQL file
-    const sqlPath = path.join(__dirname, '../src/storage/schema/users.sql');
+    // Read SQL file based on DB type
+    const dbUrl = process.env.DATABASE_URL || '';
+    const schemaFile = dbUrl.startsWith('sqlite:') ? 'users.sql' : 'users.postgres.sql';
+    const sqlPath = path.join(__dirname, `../src/storage/schema/${schemaFile}`);
     const sql = fs.readFileSync(sqlPath, 'utf-8');
 
-    // Execute SQL
-    await db.query(sql);
+    if (dbUrl.startsWith('sqlite:')) {
+      // Let SQLite handler deal with multi-statement execution and "already exists" errors.
+      await db.query(sql);
+    } else {
+      // Execute SQL (split into statements for Postgres driver compatibility)
+      const statements = sql
+        .split(';')
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+
+      for (const stmt of statements) {
+        await db.query(stmt);
+      }
+    }
 
     logger.info('✅ Database migration completed successfully!');
     

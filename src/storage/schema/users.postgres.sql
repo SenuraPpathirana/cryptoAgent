@@ -1,76 +1,72 @@
--- Users table
+-- PostgreSQL schema (compatible with Supabase Postgres)
+
 CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   username TEXT,
-  created_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now')),
+  created_at TEXT DEFAULT (now()::text),
+  updated_at TEXT DEFAULT (now()::text),
   last_login TEXT
 );
 
--- User configurations (Telegram, Binance, etc.)
 CREATE TABLE IF NOT EXISTS user_configs (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   telegram_bot_token TEXT,
   telegram_channel_id TEXT,
   binance_api_key TEXT,
   binance_api_secret TEXT,
   binance_testnet INTEGER DEFAULT 1,
-  trading_mode TEXT DEFAULT 'paper', -- paper, testnet, live
+  trading_mode TEXT DEFAULT 'paper',
   default_leverage INTEGER DEFAULT 10,
   max_position_size_usdt INTEGER DEFAULT 100,
-  created_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now')),
+  created_at TEXT DEFAULT (now()::text),
+  updated_at TEXT DEFAULT (now()::text),
   UNIQUE(user_id)
 );
 
--- User behavior tracking (for AI learning)
 CREATE TABLE IF NOT EXISTS user_behavior (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   keyword TEXT NOT NULL,
-  category TEXT, -- 'action', 'symbol', 'feature', 'intent'
+  category TEXT,
   occurrence_count INTEGER DEFAULT 1,
-  action TEXT, -- normalized intent action (LIST_GOALS, CHECK_PRICE, CREATE_GOAL, ...)
+  action TEXT,
   action_count INTEGER DEFAULT 1,
-  last_occurred TEXT DEFAULT (datetime('now')),
-  created_at TEXT DEFAULT (datetime('now')),
+  last_occurred TEXT DEFAULT (now()::text),
+  created_at TEXT DEFAULT (now()::text),
   UNIQUE(user_id, keyword, category),
   UNIQUE(user_id, action)
 );
 
--- Schema upgrades for existing SQLite databases
-ALTER TABLE user_behavior ADD COLUMN action TEXT;
-ALTER TABLE user_behavior ADD COLUMN action_count INTEGER DEFAULT 1;
+ALTER TABLE user_behavior ADD COLUMN IF NOT EXISTS action TEXT;
+ALTER TABLE user_behavior ADD COLUMN IF NOT EXISTS action_count INTEGER DEFAULT 1;
 
--- Chat messages history
 CREATE TABLE IF NOT EXISTS chat_messages (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  id SERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-  role TEXT NOT NULL, -- 'user' or 'assistant'
+  role TEXT NOT NULL,
   message TEXT NOT NULL,
-  intent TEXT, -- Store parsed intent as JSON string
-  metadata TEXT, -- Additional context as JSON string
-  created_at TEXT DEFAULT (datetime('now'))
+  intent TEXT,
+  metadata TEXT,
+  created_at TEXT DEFAULT (now()::text)
 );
 
--- Goals table (persistent storage for goal manager)
 CREATE TABLE IF NOT EXISTS goals (
   id TEXT PRIMARY KEY,
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
   symbol TEXT NOT NULL,
   condition TEXT NOT NULL,
-  target_price REAL NOT NULL,
-  current_price REAL,
+  target_price DOUBLE PRECISION NOT NULL,
+  current_price DOUBLE PRECISION,
   state TEXT NOT NULL,
   watch_mode TEXT NOT NULL,
   notify_channel INTEGER DEFAULT 1,
   auto_trade INTEGER DEFAULT 0,
   trade_config TEXT,
-  created_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now')),
+  created_at TEXT DEFAULT (now()::text),
+  updated_at TEXT DEFAULT (now()::text),
   triggered_at TEXT,
   notified_at TEXT,
   completed_at TEXT,
@@ -80,7 +76,6 @@ CREATE TABLE IF NOT EXISTS goals (
   last_trigger_at TEXT
 );
 
--- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_user_configs_user_id ON user_configs(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_behavior_user_id ON user_behavior(user_id);

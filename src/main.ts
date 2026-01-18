@@ -4,6 +4,7 @@ import { APIServer } from './api/server';
 import { db } from './storage/db';
 import { BinanceWebSocket } from './market/binance_ws';
 import { GoalEvaluator } from './agent/goal_evaluator';
+import { GoalManager } from './agent/goal_manager';
 import { TelegramBotClient } from './telegram/telegram_bot';
 import { ChannelPublisher } from './telegram/channel_publisher';
 import { getMultiSymbolStreams } from './market/symbols';
@@ -34,6 +35,7 @@ class CryptoTelegramAgent {
 
       // 1. Connect to database
       await db.connect();
+      await GoalManager.getInstance().init();
 
       // 2. Start API server
       await this.apiServer.start();

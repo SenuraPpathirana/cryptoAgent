@@ -13,6 +13,7 @@
     "lint": "eslint src/**/*.ts",
     "lint:fix": "eslint src/**/*.ts --fix",
     "migrate": "tsx scripts/migrate.ts",
+    "transfer": "tsx scripts/transfer.ts",
     "seed": "tsx scripts/seed.ts"
   },
   "keywords": [

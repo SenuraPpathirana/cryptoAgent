@@ -37,6 +37,100 @@ interface Position {
   conditions: string[];
 }
 const openPositions: Map<string, Position[]> = new Map();
+const lastSuggestionAt: Map<number, number> = new Map();
+
+function extractBehaviorKeywords(message: string, intent?: any): Array<{ keyword: string; category: string }> {
+  const lower = message.toLowerCase();
+  const keywords: Array<{ keyword: string; category: string }> = [];
+
+  if (intent?.symbol) {
+    keywords.push({ keyword: intent.symbol, category: 'symbol' });
+  }
+
+  if (/(price|current price|quote)/.test(lower) || intent?.action === 'CHECK_PRICE') {
+    keywords.push({ keyword: 'price', category: 'keyword' });
+  }
+
+  if (/(goal|goals|alert|alerts)/.test(lower) || ['CREATE_GOAL', 'LIST_GOALS', 'DELETE_GOAL'].includes(intent?.action)) {
+    keywords.push({ keyword: 'goals', category: 'keyword' });
+  }
+
+  if (/(support)/.test(lower)) {
+    keywords.push({ keyword: 'support', category: 'keyword' });
+  }
+
+  if (/(resistance)/.test(lower)) {
+    keywords.push({ keyword: 'resistance', category: 'keyword' });
+  }
+
+  if (/(rsi|overbought|oversold)/.test(lower)) {
+    keywords.push({ keyword: 'rsi', category: 'keyword' });
+  }
+
+  if (/(macd|momentum)/.test(lower)) {
+    keywords.push({ keyword: 'macd', category: 'keyword' });
+  }
+
+  if (/(divergence)/.test(lower)) {
+    keywords.push({ keyword: 'divergence', category: 'keyword' });
+  }
+
+  if (/(telegram|botfather)/.test(lower)) {
+    keywords.push({ keyword: 'telegram', category: 'feature' });
+  }
+
+  if (/(binance|testnet)/.test(lower)) {
+    keywords.push({ keyword: 'binance', category: 'feature' });
+  }
+
+  if (['OPEN_POSITION', 'VIEW_POSITIONS', 'CLOSE_ALL_POSITIONS'].includes(intent?.action)) {
+    keywords.push({ keyword: 'position', category: 'feature' });
+  }
+
+  return keywords;
+}
+
+async function appendSuggestionIfAny(
+  baseResponse: string,
+  userId: number,
+  intentAction: string | undefined,
+  history: Array<{ role: 'user' | 'assistant'; message: string; timestamp: number }>,
+  tradingMode?: string
+): Promise<string> {
+  if (!intentAction || intentAction === 'HELP' || intentAction === 'UNKNOWN') {
+    return baseResponse;
+  }
+
+  if (/^❌|error|failed/i.test(baseResponse)) {
+    return baseResponse;
+  }
+
+  const now = Date.now();
+  const last = lastSuggestionAt.get(userId) || 0;
+  if (now - last < 60_000) {
+    return baseResponse;
+  }
+
+  const suggestions = await usersRepo.getSmartSuggestions(userId);
+  if (!suggestions || suggestions.length === 0) {
+    return baseResponse;
+  }
+
+  const suggestion = suggestions[0];
+  let finalSuggestion = suggestion;
+  if (llm.isEnabled()) {
+    const refined = await llm.generateSuggestionMessage(suggestion, {
+      conversationHistory: history.slice(-6).map(m => ({ role: m.role, message: m.message })),
+      tradingMode
+    });
+    if (refined) {
+      finalSuggestion = refined;
+    }
+  }
+
+  lastSuggestionAt.set(userId, now);
+  return `${baseResponse}\n\n💡 ${finalSuggestion}`;
+}
 
 export const chatRouter = Router();
 
@@ -124,6 +218,25 @@ chatRouter.post('/', async (req: Request, res: Response) => {
 
     const goalsRepo = GoalsRepository.getInstance();
     const priceCache = PriceCache.getInstance();
+
+    if (intent?.action) {
+      try {
+        await usersRepo.trackAction(userId, intent.action);
+      } catch (error) {
+        logger.warn('Failed to track action', { error, userId, action: intent.action });
+      }
+    }
+
+    try {
+      const keywords = extractBehaviorKeywords(message, intent);
+      if (keywords.length > 0) {
+        await Promise.all(
+          keywords.map(k => usersRepo.trackBehavior(userId, k.keyword, k.category))
+        );
+      }
+    } catch (error) {
+      logger.warn('Failed to track behavior keywords', { error, userId });
+    }
     
     // Store user message in history
     if (!conversationHistory.has(sessionId)) {
@@ -147,10 +260,11 @@ chatRouter.post('/', async (req: Request, res: Response) => {
         
         if (userPositions.length === 0) {
           const noPositionsMsg = `📊 Open Positions\n\nYou have no open positions.`;
-          history.push({ role: 'assistant', message: noPositionsMsg, timestamp: Date.now() });
+          const responseText = await appendSuggestionIfAny(noPositionsMsg, userId, intent.action, history, tradingMode);
+          history.push({ role: 'assistant', message: responseText, timestamp: Date.now() });
           return res.json({
             ok: true,
-            response: noPositionsMsg
+            response: responseText
           });
         }
         
@@ -177,10 +291,11 @@ chatRouter.post('/', async (req: Request, res: Response) => {
         
         positionsMsg += `⚠️ PAPER TRADING MODE\n━━━━━━━━━━━━━━━━━━`;
         
-        history.push({ role: 'assistant', message: positionsMsg, timestamp: Date.now() });
+        const positionsResponse = await appendSuggestionIfAny(positionsMsg, userId, intent.action, history, tradingMode);
+        history.push({ role: 'assistant', message: positionsResponse, timestamp: Date.now() });
         return res.json({
           ok: true,
-          response: positionsMsg,
+          response: positionsResponse,
           positions: userPositions
         });
       
@@ -189,10 +304,11 @@ chatRouter.post('/', async (req: Request, res: Response) => {
         
         if (closingPositions.length === 0) {
           const noPositionsMsg = `📭 No open positions to close.`;
-          history.push({ role: 'assistant', message: noPositionsMsg, timestamp: Date.now() });
+          const responseText = await appendSuggestionIfAny(noPositionsMsg, userId, intent.action, history, tradingMode);
+          history.push({ role: 'assistant', message: responseText, timestamp: Date.now() });
           return res.json({
             ok: true,
-            response: noPositionsMsg
+            response: responseText
           });
         }
 
@@ -203,11 +319,12 @@ chatRouter.post('/', async (req: Request, res: Response) => {
           `• ${p.symbol} ${p.side} - Entry: $${p.entryPrice.toLocaleString()}`
         ).join('\\n')}\n\n⚠️ Note: In testnet mode, positions are closed in memory only.`;
         
-        history.push({ role: 'assistant', message: closedMsg, timestamp: Date.now() });
+        const closedResponse = await appendSuggestionIfAny(closedMsg, userId, intent.action, history, tradingMode);
+        history.push({ role: 'assistant', message: closedResponse, timestamp: Date.now() });
         
         return res.json({
           ok: true,
-          response: closedMsg,
+          response: closedResponse,
           closedCount: closingPositions.length
         });
       
@@ -219,19 +336,20 @@ chatRouter.post('/', async (req: Request, res: Response) => {
           ? `✅ Trading Agent Enabled\n\nI can now open positions based on your analysis and conditions.\n\nExample: "If near resistance with bearish divergence and overbought RSI, open short position"`
           : `⏸️ Trading Agent Disabled\n\nI will not open any positions until you enable trading agent again.`;
         
+        const statusResponse = await appendSuggestionIfAny(statusMsg, userId, intent.action, history, tradingMode);
         // Store in history
-        history.push({ role: 'assistant', message: statusMsg, timestamp: Date.now() });
+        history.push({ role: 'assistant', message: statusResponse, timestamp: Date.now() });
         
         return res.json({
           ok: true,
-          response: statusMsg,
+          response: statusResponse,
           tradingAgentEnabled: isEnabled
         });
 
       case 'OPEN_POSITION':
         // Check if trading agent is enabled
         if (!tradingAgentMode.get(sessionId)) {
-          const errorMsg = `❌ Trading Agent Disabled\n\nPlease enable trading agent first by clicking the "Start Agent" button.`;
+          const errorMsg = `❌ Agent mode is off.\n\nSwitch the dropdown to "Agent" to open positions.`;
           history.push({ role: 'assistant', message: errorMsg, timestamp: Date.now() });
           return res.json({
             ok: true,
@@ -362,10 +480,11 @@ chatRouter.post('/', async (req: Request, res: Response) => {
         // If conditions not met, inform user
         if (!conditionsMet) {
           const conditionsMsg = `📊 Conditions Check for ${posSymbol}\n\n${conditions.join('\n')}\n\n❌ Not all conditions met. Position not opened.`;
-          history.push({ role: 'assistant', message: conditionsMsg, timestamp: Date.now() });
+          const conditionsResponse = await appendSuggestionIfAny(conditionsMsg, userId, intent.action, history, tradingMode);
+          history.push({ role: 'assistant', message: conditionsResponse, timestamp: Date.now() });
           return res.json({
             ok: true,
-            response: conditionsMsg
+            response: conditionsResponse
           });
         }
 
@@ -405,7 +524,8 @@ chatRouter.post('/', async (req: Request, res: Response) => {
           const modeLabel = tradeExecutor.isPaperMode() ? '⚠️ PAPER TRADING MODE (memory only)' : '🧪 BINANCE TESTNET MODE (mock trading)';
           const positionMsg = `━━━━━━━━━━━━━━━━━━\n✅ POSITION OPENED\n━━━━━━━━━━━━━━━━━━\n\nSymbol: ${posSymbol}\nSide: ${side}\nEntry: $${currentPrice.toLocaleString()}\nLeverage: ${leverage}x\nSize: $${positionSize}\n\nStop Loss: $${stopLoss.toFixed(2)}\nTake Profit: $${takeProfit.toFixed(2)}\n\nConditions Met:\n${conditions.join('\n')}\n\nTrade ID: ${tradeResult.tradeId}\n${tradeResult.orderId ? `Order ID: ${tradeResult.orderId}\n` : ''}${modeLabel}\n━━━━━━━━━━━━━━━━━━`;
           
-          history.push({ role: 'assistant', message: positionMsg, timestamp: Date.now() });
+          const positionResponse = await appendSuggestionIfAny(positionMsg, userId, intent.action, history, tradingMode);
+          history.push({ role: 'assistant', message: positionResponse, timestamp: Date.now() });
           
           // Store position
           const userPositions = openPositions.get(sessionId) || [];
@@ -443,7 +563,7 @@ chatRouter.post('/', async (req: Request, res: Response) => {
           
           return res.json({
             ok: true,
-            response: positionMsg,
+            response: positionResponse,
             tradeId: tradeResult.tradeId
           });
         } else {
@@ -456,6 +576,14 @@ chatRouter.post('/', async (req: Request, res: Response) => {
         }
 
       case 'CREATE_GOAL':
+        if (intent?.autoTrade && !tradingAgentMode.get(sessionId)) {
+          const errorMsg = `❌ Agent mode is off.\n\nSwitch the dropdown to "Agent" to create goals that open positions.`;
+          history.push({ role: 'assistant', message: errorMsg, timestamp: Date.now() });
+          return res.json({
+            ok: true,
+            response: errorMsg
+          });
+        }
         // Check if user is referencing technical levels/conditions
         const msg = message.toLowerCase();
         const lastResult = lastAnalysis.get(sessionId);
@@ -533,11 +661,12 @@ chatRouter.post('/', async (req: Request, res: Response) => {
         });
 
         const goalResponse = response || nlp.generateResponse(intent, goal);
-        history.push({ role: 'assistant', message: goalResponse, timestamp: Date.now() });
+        const goalFinalResponse = await appendSuggestionIfAny(goalResponse, userId, intent.action, history, tradingMode);
+        history.push({ role: 'assistant', message: goalFinalResponse, timestamp: Date.now() });
         
         return res.json({
           ok: true,
-          response: goalResponse,
+          response: goalFinalResponse,
           goal: goal,
           intent: intent,
           llmUsed: llmUsed
@@ -546,9 +675,11 @@ chatRouter.post('/', async (req: Request, res: Response) => {
       case 'LIST_GOALS':
         result = await goalsRepo.findByUserId(userId);
         const activeGoals = result.filter((g: any) => g.state === 'WATCHING' || g.state === 'TRIGGERED');
+        const listResponse = response || nlp.generateResponse(intent, activeGoals);
+        const listFinalResponse = await appendSuggestionIfAny(listResponse, userId, intent.action, history, tradingMode);
         return res.json({
           ok: true,
-          response: response || nlp.generateResponse(intent, activeGoals),
+          response: listFinalResponse,
           goals: activeGoals,
           intent: intent,
           llmUsed: llmUsed
@@ -567,9 +698,10 @@ chatRouter.post('/', async (req: Request, res: Response) => {
           priceResponse = `❌ Sorry, I couldn't fetch the current price for ${intent.symbol || 'BTC'}. Please try again.`;
         }
         
+        const priceFinalResponse = await appendSuggestionIfAny(priceResponse, userId, intent.action, history, tradingMode);
         return res.json({
           ok: true,
-          response: priceResponse,
+          response: priceFinalResponse,
           price: price,
           intent: intent,
           llmUsed: llmUsed
@@ -663,12 +795,13 @@ chatRouter.post('/', async (req: Request, res: Response) => {
               break;
           }
           
+          const analysisFinalResponse = await appendSuggestionIfAny(analysisResponse, userId, intent.action, history, tradingMode);
           // Store assistant response in history
-          history.push({ role: 'assistant', message: analysisResponse, timestamp: Date.now() });
+          history.push({ role: 'assistant', message: analysisFinalResponse, timestamp: Date.now() });
           
           return res.json({
             ok: true,
-            response: analysisResponse,
+            response: analysisFinalResponse,
             intent: intent,
             llmUsed: llmUsed
           });

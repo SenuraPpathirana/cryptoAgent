@@ -333,9 +333,47 @@
         const errorDiv = document.getElementById('error');
         const successDiv = document.getElementById('success');
 
+        function routeByConfig() {
+            if (!authToken) {
+                goToStep(1);
+                return;
+            }
+
+            fetch('/api/user/config', {
+                headers: { 'Authorization': `Bearer ${authToken}` }
+            })
+            .then(res => {
+                if (!res.ok) throw new Error('Failed to load config');
+                return res.json();
+            })
+            .then(config => {
+                const hasTelegram = !!config.telegram_configured;
+                const hasBinance = !!config.binance_configured;
+
+                if (hasTelegram && hasBinance) {
+                    window.location.href = '/';
+                    return;
+                }
+
+                if (hasTelegram && !hasBinance) {
+                    goToStep(3);
+                    return;
+                }
+
+                if (!hasTelegram && hasBinance) {
+                    goToStep(2);
+                    return;
+                }
+
+                goToStep(2);
+            })
+            .catch(() => goToStep(2));
+        }
+
         // Check if already logged in
         const token = localStorage.getItem('authToken');
         if (token) {
+            authToken = token;
             // Verify token
             fetch('/api/auth/verify', {
                 headers: { 'Authorization': `Bearer ${token}` }
@@ -343,8 +381,7 @@
             .then(res => res.json())
             .then(data => {
                 if (data.valid) {
-                    // Already logged in, redirect to chat
-                    window.location.href = '/';
+                    routeByConfig();
                 } else {
                     localStorage.removeItem('authToken');
                 }
@@ -401,9 +438,9 @@
                     
                     showSuccess(isRegisterMode ? 'Account created successfully!' : 'Login successful!');
                     
-                    // Move to next step
+                    // Move to next step based on existing configuration
                     setTimeout(() => {
-                        goToStep(2);
+                        routeByConfig();
                     }, 1000);
                 } else {
                     showError(data.error || 'Authentication failed');
