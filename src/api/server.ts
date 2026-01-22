@@ -2,7 +2,6 @@ import express, { Application } from 'express';
 import { createServer as createHTTPServer, Server } from 'http';
 import { WebSocketServer } from 'ws';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { env } from '../config/env';
 import { createModuleLogger } from '../config/logger';
 import { healthRouter } from './routes/health.routes';
@@ -15,8 +14,6 @@ import { errorMiddleware } from './middleware/error.middleware';
 import { authMiddleware } from './middleware/auth.middleware';
 
 const logger = createModuleLogger('API');
-const __filename = typeof __filename !== 'undefined' ? __filename : '';
-const __dirname = typeof __dirname !== 'undefined' ? __dirname : '';
 
 export class APIServer {
   private app: Application;
@@ -63,7 +60,7 @@ export class APIServer {
 
   private setupRoutes(): void {
     // Serve static files (chat UI)
-    const publicPath = path.join(__dirname, '../../public');
+    const publicPath = path.join(process.cwd(), 'public');
     this.app.use(express.static(publicPath));
 
     // Public routes
