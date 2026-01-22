@@ -1,20 +1,37 @@
-import { RSIResult } from '../indicators/rsi';
-import { MACDResult } from '../indicators/macd';
-import { MAResult } from '../indicators/moving_averages';
-import { BollingerBandsResult } from '../indicators/bollinger_bands';
-import { TrendResult } from '../patterns/trend_detector';
-import { SupportResistanceResult } from '../patterns/support_resistance';
+import { RSIResult } from './indicators/rsi';
+import { MACDResult } from './indicators/macd';
+import { MAResult } from './indicators/moving_averages';
+import { BollingerBandsResult } from './indicators/bollinger_bands';
+import { TrendResult } from './patterns/trend_detector';
+import { SupportResistanceResult } from './patterns/support_resistance';
+import { env } from '../config/env';
+import { MLSignalService } from '../ml/ml_signal_service';
 
 export interface TradingSignal {
   action: 'STRONG_BUY' | 'BUY' | 'HOLD' | 'SELL' | 'STRONG_SELL';
   confidence: number; // 0-100
   reasons: string[];
   warnings: string[];
+
+  /**
+   * Optional ML metadata (present only when ML_SIGNAL_ENABLED=true and model loads)
+   */
+  ml?: {
+    probUp: number; // 0..1
+    mlConfidence: number; // 0..100
+    direction: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+    modelVersion: string;
+    weight: number; // 0..1 (how much ML contributed to final score)
+  };
 }
 
 export class SignalGenerator {
   /**
-   * Generate trading signal based on all technical indicators
+   * Generate trading signal based on all technical indicators.
+   *
+   * If ML is enabled (see env.ts), we blend:
+   * - ruleScore: your existing point-based system (-100..+100)
+   * - mlScore: derived from ML probUp mapped to (-100..+100)
    */
   public static generate(
     rsi: RSIResult | null,
@@ -133,21 +150,51 @@ export class SignalGenerator {
       }
     }
 
-    // Calculate total score (-100 to +100)
-    const totalScore = bullishPoints - bearishPoints;
+    // ----- Rule score (-100..+100 roughly) -----
+    const ruleScore = bullishPoints - bearishPoints;
     const maxPoints = 100;
-    const confidence = Math.round((Math.abs(totalScore) / maxPoints) * 100);
+    const ruleConfidence = Math.round((Math.abs(ruleScore) / maxPoints) * 100);
 
-    // Determine action
+    // ----- Optional ML blend -----
+    const mlService = MLSignalService.getInstance();
+    const mlPred = mlService.predict(rsi, macd, ma, bb, trend, sr);
+
+    let finalScore = ruleScore;
+    let finalConfidence = Math.min(100, ruleConfidence);
+    let mlMeta: TradingSignal['ml'] = undefined;
+
+    if (mlPred) {
+      const w = Math.max(0, Math.min(1, env.ML_SIGNAL_WEIGHT));
+
+      // Map probUp (0..1) -> mlScore (-100..+100)
+      const mlScore = (mlPred.probUp - 0.5) * 2 * 100;
+
+      finalScore = (1 - w) * ruleScore + w * mlScore;
+      finalConfidence = Math.round((1 - w) * Math.min(100, ruleConfidence) + w * mlPred.confidence);
+
+      reasons.unshift(
+        `ML model v${mlPred.modelVersion}: probUp ${(mlPred.probUp * 100).toFixed(1)}% (blend weight ${(w * 100).toFixed(0)}%)`
+      );
+
+      mlMeta = {
+        probUp: mlPred.probUp,
+        mlConfidence: mlPred.confidence,
+        direction: mlPred.direction,
+        modelVersion: mlPred.modelVersion,
+        weight: w
+      };
+    }
+
+    // Determine action (based on FINAL score)
     let action: 'STRONG_BUY' | 'BUY' | 'HOLD' | 'SELL' | 'STRONG_SELL';
 
-    if (totalScore >= 50) {
+    if (finalScore >= 50) {
       action = 'STRONG_BUY';
-    } else if (totalScore >= 20) {
+    } else if (finalScore >= 20) {
       action = 'BUY';
-    } else if (totalScore <= -50) {
+    } else if (finalScore <= -50) {
       action = 'STRONG_SELL';
-    } else if (totalScore <= -20) {
+    } else if (finalScore <= -20) {
       action = 'SELL';
     } else {
       action = 'HOLD';
@@ -155,9 +202,10 @@ export class SignalGenerator {
 
     return {
       action,
-      confidence: Math.min(100, confidence),
+      confidence: Math.min(100, finalConfidence),
       reasons,
-      warnings
+      warnings,
+      ...(mlMeta ? { ml: mlMeta } : {})
     };
   }
 

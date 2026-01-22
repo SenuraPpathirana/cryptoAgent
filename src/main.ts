@@ -9,6 +9,7 @@ import { TelegramBotClient } from './telegram/telegram_bot';
 import { ChannelPublisher } from './telegram/channel_publisher';
 import { getMultiSymbolStreams } from './market/symbols';
 import { SUPPORTED_SYMBOLS } from './config/constants';
+import { MLTrainerScheduler } from './ml/ml_trainer_scheduler';
 
 const logger = createModuleLogger('Main');
 
@@ -18,6 +19,7 @@ class CryptoTelegramAgent {
   private goalEvaluator: GoalEvaluator;
   private telegramBot: TelegramBotClient;
   private channelPublisher: ChannelPublisher;
+  private mlTrainer: MLTrainerScheduler;
 
   constructor() {
     this.apiServer = new APIServer();
@@ -25,6 +27,7 @@ class CryptoTelegramAgent {
     this.goalEvaluator = GoalEvaluator.getInstance();
     this.telegramBot = TelegramBotClient.getInstance();
     this.channelPublisher = ChannelPublisher.getInstance();
+    this.mlTrainer = MLTrainerScheduler.getInstance();
   }
 
   public async start(): Promise<void> {
@@ -47,7 +50,16 @@ class CryptoTelegramAgent {
       // 4. Start goal evaluator
       this.goalEvaluator.start();
 
-      // 5. Send startup notification
+      // 5. Start ML auto-trainer if enabled
+      if (env.ML_AUTOTRAIN_ENABLED) {
+        logger.info('Starting ML auto-trainer...');
+        this.mlTrainer.start(
+          env.ML_AUTOTRAIN_INTERVAL_HOURS,
+          env.ML_AUTOTRAIN_ON_START
+        );
+      }
+
+      // 6. Send startup notification
       await this.channelPublisher.publishCustomMessage(
         `✅ *Crypto Telegram Agent Started*\n\nMode: ${env.TRADING_MODE.toUpperCase()}\nEnvironment: ${env.NODE_ENV}`
       );
@@ -69,6 +81,9 @@ class CryptoTelegramAgent {
       try {
         // Stop goal evaluator
         this.goalEvaluator.stop();
+
+        // Stop ML trainer
+        this.mlTrainer.stop();
 
         // Disconnect WebSocket
         this.binanceWS.disconnect();

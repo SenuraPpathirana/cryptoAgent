@@ -521,8 +521,15 @@ chatRouter.post('/', async (req: Request, res: Response) => {
 
         if (tradeResult.success) {
           // Format position opened message
-          const modeLabel = tradeExecutor.isPaperMode() ? '⚠️ PAPER TRADING MODE (memory only)' : '🧪 BINANCE TESTNET MODE (mock trading)';
-          const positionMsg = `━━━━━━━━━━━━━━━━━━\n✅ POSITION OPENED\n━━━━━━━━━━━━━━━━━━\n\nSymbol: ${posSymbol}\nSide: ${side}\nEntry: $${currentPrice.toLocaleString()}\nLeverage: ${leverage}x\nSize: $${positionSize}\n\nStop Loss: $${stopLoss.toFixed(2)}\nTake Profit: $${takeProfit.toFixed(2)}\n\nConditions Met:\n${conditions.join('\n')}\n\nTrade ID: ${tradeResult.tradeId}\n${tradeResult.orderId ? `Order ID: ${tradeResult.orderId}\n` : ''}${modeLabel}\n━━━━━━━━━━━━━━━━━━`;
+          const modeLabel = tradeExecutor.isPaperMode() ? '⚠️ Paper Trading' : '🧪 Testnet Mode';
+          const positionMsg = `✅ *POSITION OPENED*\n\n` +
+            `*${posSymbol}* ${side} ${leverage}x\n` +
+            `Entry: $${currentPrice.toLocaleString()}\n` +
+            `Size: $${positionSize}\n\n` +
+            `🎯 TP: $${takeProfit.toFixed(2)}\n` +
+            `🛡️ SL: $${stopLoss.toFixed(2)}\n\n` +
+            `${modeLabel}\n` +
+            `ID: ${tradeResult.tradeId}`;
           
           const positionResponse = await appendSuggestionIfAny(positionMsg, userId, intent.action, history, tradingMode);
           history.push({ role: 'assistant', message: positionResponse, timestamp: Date.now() });

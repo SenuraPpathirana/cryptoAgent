@@ -1,0 +1,56 @@
+{
+  "modelType": "logistic_regression",
+  "version": "v1",
+  "featureNames": [
+    "rsi14",
+    "macd",
+    "macd_signal",
+    "ema50_dist",
+    "atr14_pct",
+    "vol_z50"
+  ],
+  "weights": [
+    -0.00147848143973718,
+    -0.0002550424108622347,
+    5.6734969055724116e-05,
+    -0.17450143366356968,
+    0.1292212945854914,
+    0.33963653679647876
+  ],
+  "bias": 0.03839585009721583,
+  "meta": {
+    "lookahead": 3,
+    "up_threshold": 0.004,
+    "down_threshold": -0.004,
+    "metrics": {
+      "auc": 0.6430427592723836,
+      "report": {
+        "0": {
+          "precision": 0.8769230769230769,
+          "recall": 0.6867469879518072,
+          "f1-score": 0.7702702702702703,
+          "support": 249.0
+        },
+        "1": {
+          "precision": 0.2571428571428571,
+          "recall": 0.5294117647058824,
+          "f1-score": 0.34615384615384615,
+          "support": 51.0
+        },
+        "accuracy": 0.66,
+        "macro avg": {
+          "precision": 0.567032967032967,
+          "recall": 0.6080793763288448,
+          "f1-score": 0.5582120582120582,
+          "support": 300.0
+        },
+        "weighted avg": {
+          "precision": 0.7715604395604396,
+          "recall": 0.66,
+          "f1-score": 0.6981704781704782,
+          "support": 300.0
+        }
+      }
+    }
+  }
+}

@@ -25,7 +25,7 @@ export class RSIIndicator {
    */
   public static calculate(prices: number[], period: number = 14): RSIResult | null {
     if (prices.length < period + 1) {
-      logger.warn(`Insufficient data for RSI calculation. Need ${period + 1}, got ${prices.length}`);
+      logger.debug(`Insufficient data for RSI calculation. Need ${period + 1}, got ${prices.length}`);
       return null;
     }
 

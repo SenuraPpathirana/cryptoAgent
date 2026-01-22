@@ -51,6 +51,22 @@ const envSchema = z.object({
   GROQ_API_KEY: z.string().optional(),
   GITHUB_TOKEN: z.string().optional(),
 
+  // ML Signal Model
+  ML_SIGNAL_ENABLED: z.string().transform(val => val === "true").default("false"),
+  ML_SIGNAL_MODEL_PATH: z.string().default(path.resolve("models/ml_signal_model.json")),
+  ML_SIGNAL_WEIGHT: z.string().transform(Number).default("0.5"),
+
+  // ML Auto-Training
+  ML_AUTOTRAIN_ENABLED: z.string().transform(val => val === "true").default("false"),
+  ML_AUTOTRAIN_INTERVAL_HOURS: z.string().transform(Number).default("24"),
+  ML_AUTOTRAIN_ON_START: z.string().transform(val => val === "true").default("false"),
+  ML_TRAIN_SYMBOLS: z.string().default("BTCUSDT"),
+  ML_TRAIN_TIMEFRAME: z.string().default("1h"),
+  ML_TRAIN_LIMIT: z.string().default("1500"),
+  ML_TRAIN_LOOKAHEAD: z.string().default("3"),
+  ML_TRAIN_UP_THRESHOLD: z.string().default("0.004"),
+  ML_TRAIN_DOWN_THRESHOLD: z.string().default("-0.004"),
+
   // Monitoring
   HEALTH_CHECK_INTERVAL_MS: z.string().transform(Number).default('30000'),
   RECONNECT_DELAY_MS: z.string().transform(Number).default('5000'),

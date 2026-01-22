@@ -85,6 +85,21 @@ export class TradeExecutor {
     testnet?: boolean
   ): Promise<TradeResult> {
     try {
+      // Validate API credentials format
+      if (!apiKey || !apiSecret) {
+        throw new Error('API key and secret are required');
+      }
+      
+      // Check for corrupted keys
+      if (apiKey.includes('parameter is either empty or invalid') || apiSecret.includes('parameter is either empty or invalid')) {
+        throw new Error('API credentials appear to be corrupted. Please update your Binance API settings.');
+      }
+      
+      // Validate format (Binance keys should be alphanumeric)
+      if (!/^[a-zA-Z0-9]+$/.test(apiKey) || !/^[a-zA-Z0-9]+$/.test(apiSecret)) {
+        throw new Error('Invalid API key format. Binance API keys should only contain letters and numbers.');
+      }
+      
       // Create a Binance client with user-specific credentials
       const userBinance = new BinanceFuturesREST(apiKey, apiSecret, testnet);
 

@@ -316,54 +316,70 @@ export class AnalysisEngine {
     sr: SupportResistanceResult | null,
     signal: TradingSignal
   ): string {
-    let summary = `📊 COMPREHENSIVE ANALYSIS: ${symbol}\n`;
-    summary += `═══════════════════════════════\n\n`;
-    summary += `💰 Current Price: $${currentPrice.toLocaleString()}\n\n`;
+    let summary = `📊 *${symbol} Analysis*\n\n`;
+    
+    summary += `💰 Price: $${currentPrice.toLocaleString()}\n`;
+    
+    // Signal with emoji
+    const actionEmoji = {
+      'STRONG_BUY': '🟢🟢',
+      'BUY': '🟢',
+      'HOLD': '🟡',
+      'SELL': '🔴',
+      'STRONG_SELL': '🔴🔴'
+    }[signal.action];
+    
+    summary += `${actionEmoji} *${signal.action}* - Confidence: ${signal.confidence}%\n\n`;
 
-    // Signal
-    summary += SignalGenerator.getSignalMessage(signal);
-    summary += '\n\n═══════════════════════════════\n\n';
+    // Top 3 reasons only
+    if (signal.reasons.length > 0) {
+      summary += `*Key Signals:*\n`;
+      signal.reasons.slice(0, 3).forEach(reason => {
+        summary += `• ${reason}\n`;
+      });
+      summary += '\n';
+    }
 
-    // RSI
+    // Quick indicator snapshot (simplified)
+    const indicators: string[] = [];
+    
     if (rsi) {
-      summary += `📈 RSI INDICATOR:\n`;
-      summary += RSIIndicator.getSignalMessage(rsi);
-      summary += '\n\n';
+      const rsiEmoji = rsi.signal === 'OVERSOLD' ? '🟢' : rsi.signal === 'OVERBOUGHT' ? '🔴' : '⚪';
+      indicators.push(`${rsiEmoji} RSI: ${rsi.value.toFixed(0)}`);
     }
-
-    // MACD
+    
     if (macd) {
-      summary += `📊 MACD INDICATOR:\n`;
-      summary += MACDIndicator.getSignalMessage(macd);
-      summary += '\n\n';
+      const macdEmoji = macd.trend === 'BULLISH' ? '🟢' : macd.trend === 'BEARISH' ? '🔴' : '⚪';
+      indicators.push(`${macdEmoji} MACD: ${macd.trend}`);
     }
-
-    // Moving Averages
+    
     if (ma) {
-      summary += MovingAverageIndicator.getSignalMessage(ma);
-      summary += '\n\n';
+      const trendEmoji = ma.trend.includes('UP') ? '🟢' : ma.trend.includes('DOWN') ? '🔴' : '⚪';
+      indicators.push(`${trendEmoji} Trend: ${ma.trend.replace('_', ' ')}`);
     }
 
-    // Bollinger Bands
-    if (bb) {
-      summary += BollingerBandsIndicator.getSignalMessage(bb);
-      summary += '\n\n';
+    if (indicators.length > 0) {
+      summary += `*Indicators:*\n${indicators.join('\n')}\n\n`;
     }
 
-    // Trend
-    if (trend) {
-      summary += TrendDetector.getSignalMessage(trend);
-      summary += '\n\n';
+    // Warnings (top 2 only)
+    if (signal.warnings.length > 0) {
+      summary += `⚠️ *Warnings:*\n`;
+      signal.warnings.slice(0, 2).forEach(warning => {
+        summary += `• ${warning}\n`;
+      });
+      summary += '\n';
     }
 
-    // Support/Resistance
-    if (sr) {
-      summary += SupportResistanceDetector.getSignalMessage(sr, currentPrice);
-      summary += '\n\n';
+    // Support/Resistance (simplified)
+    if (sr && (sr.support?.length || sr.resistance?.length)) {
+      summary += `*Levels:*\n`;
+      if (sr.nearestSupport) summary += `📊 Support: $${sr.nearestSupport.toLocaleString()}\n`;
+      if (sr.nearestResistance) summary += `📊 Resistance: $${sr.nearestResistance.toLocaleString()}\n`;
+      summary += '\n';
     }
 
-    summary += '═══════════════════════════════\n';
-    summary += '⚠️ This is not financial advice. DYOR.\n';
+    summary += `_Not financial advice. DYOR._`;
 
     return summary;
   }

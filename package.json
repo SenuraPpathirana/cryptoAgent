@@ -14,7 +14,10 @@
     "lint:fix": "eslint src/**/*.ts --fix",
     "migrate": "tsx scripts/migrate.ts",
     "transfer": "tsx scripts/transfer.ts",
-    "seed": "tsx scripts/seed.ts"
+    "seed": "tsx scripts/seed.ts",
+    "build": "tsc",
+    "ml:dump": "tsx scripts/dump_candles.ts",
+    "ml:autotrain": "ts-node scripts/ml_autotrain.ts"
   },
   "keywords": [
     "crypto",

@@ -13,8 +13,24 @@ export class BinanceFuturesREST {
   private baseURL: string;
 
   constructor(apiKey?: string, apiSecret?: string, testnet?: boolean) {
-    this.apiKey = apiKey || env.BINANCE_API_KEY || '';
-    this.apiSecret = apiSecret || env.BINANCE_API_SECRET || '';
+    // Clean and validate API key
+    const rawApiKey = apiKey || env.BINANCE_API_KEY || '';
+    const rawApiSecret = apiSecret || env.BINANCE_API_SECRET || '';
+    
+    // Remove any error messages or invalid characters from keys
+    this.apiKey = rawApiKey.replace(/parameter is either empty or invalid\./gi, '').trim();
+    this.apiSecret = rawApiSecret.replace(/parameter is either empty or invalid\./gi, '').trim();
+    
+    // Validate format (Binance API keys should be alphanumeric)
+    if (this.apiKey && !/^[a-zA-Z0-9]+$/.test(this.apiKey)) {
+      logger.error('Invalid API key format detected', { 
+        keyLength: this.apiKey.length,
+        firstChars: this.apiKey.substring(0, 10),
+        hasInvalidChars: true
+      });
+      this.apiKey = '';
+    }
+    
     this.baseURL = testnet !== false 
       ? 'https://testnet.binancefuture.com' 
       : (env.BINANCE_REST_BASE || 'https://testnet.binancefuture.com');
@@ -28,7 +44,8 @@ export class BinanceFuturesREST {
 
     logger.info('Binance REST client created', { 
       baseURL: this.baseURL, 
-      hasApiKey: !!this.apiKey 
+      hasApiKey: !!this.apiKey,
+      apiKeyLength: this.apiKey.length
     });
   }
 
