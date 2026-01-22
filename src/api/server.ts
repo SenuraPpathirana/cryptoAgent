@@ -15,8 +15,8 @@ import { errorMiddleware } from './middleware/error.middleware';
 import { authMiddleware } from './middleware/auth.middleware';
 
 const logger = createModuleLogger('API');
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __filename = typeof __filename !== 'undefined' ? __filename : '';
+const __dirname = typeof __dirname !== 'undefined' ? __dirname : '';
 
 export class APIServer {
   private app: Application;

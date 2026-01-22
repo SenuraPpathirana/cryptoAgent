@@ -93,9 +93,9 @@ export class BinanceFuturesREST {
       return symbolInfo;
     } catch (error: any) {
       logger.error('Failed to get exchange info', { 
-        error: error.message,
-        status: error?.response?.status,
-        data: error?.response?.data
+        error: (error as any).message,
+        status: (error as any)?.response?.status,
+        data: (error as any)?.response?.data
       });
       throw error;
     }

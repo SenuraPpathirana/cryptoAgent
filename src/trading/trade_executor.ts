@@ -19,7 +19,6 @@ export interface TradeResult {
 export class TradeExecutor {
   private static instance: TradeExecutor;
   private isPaper: boolean;
-  private binance: BinanceFuturesREST;
 
   private constructor() {
     this.isPaper = env.TRADING_MODE === 'paper';
